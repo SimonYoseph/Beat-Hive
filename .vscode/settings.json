@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^nvm ls$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}
