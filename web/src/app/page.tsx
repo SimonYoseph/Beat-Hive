@@ -30,6 +30,20 @@ import {
 import { signIn, signOut, useSession } from "next-auth/react";
 import { motion, AnimatePresence, useMotionValue, animate, useTransform } from "framer-motion";
 
+// Mock DJ Data for Genres to display tallies
+const GENRE_TALLIES = [
+  { name: 'Afrobeats', count: 142 },
+  { name: 'Hip Hop', count: 98 },
+  { name: 'Amapiano', count: 86 },
+  { name: 'R&B', count: 64 },
+  { name: 'Pop', count: 45 },
+  { name: 'Reggaeton', count: 32 },
+  { name: 'Dancehall', count: 28 },
+  { name: 'House', count: 19 },
+  { name: 'EDM', count: 14 },
+  { name: 'Latino', count: 9 },
+].sort((a, b) => b.count - a.count);
+
 const HIVE_ITEMS = [
   { id: 'request', title: "Request", description: "Search and request a song for the queue", icon: <Search size={36} strokeWidth={2.5} /> },
   { id: 'queue', title: "Queue", description: "View what's coming up next", icon: <ListMusic size={32} /> },
@@ -619,16 +633,21 @@ export default function BeatHiveApp() {
         <div className="bg-[#1a1a1a] rounded-2xl p-2.5 mb-4 border border-white/5 relative overflow-hidden shadow-xl drop-shadow-2xl z-10 shrink-0 w-[85%] mx-auto">
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-yellow-600 via-yellow-400 to-yellow-600"></div>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-lg flex items-center justify-center shadow-lg relative overflow-hidden shrink-0">
-              <Music size={16} className="text-black/80 z-10" />
+            <div className="w-10 h-10 bg-[#222] rounded-lg shadow-lg relative overflow-hidden shrink-0 border border-white/10">
+              {/* Using a standard img tag for simplicity in this pure client component or we could also use Next/Image */}
+              <img 
+                src="/images/asake-happiness.jpg" 
+                alt="Happiness Cover Art" 
+                className="w-full h-full object-cover" 
+              />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-[9px] text-gray-500 font-bold mb-0.5 uppercase tracking-widest flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></span>
                 Now Playing
               </p>
-              <h2 className="font-bold text-sm leading-tight text-white truncate">Losing It</h2>
-              <p className="text-[10px] text-yellow-500 font-semibold truncate mt-0.5">FISHER</p>
+              <h2 className="font-bold text-sm leading-tight text-white truncate">Happiness</h2>
+              <p className="text-[10px] text-yellow-500 font-semibold truncate mt-0.5">Asake & Gunna</p>
             </div>
             <motion.button 
               whileTap={{ scale: 0.9 }}
@@ -679,9 +698,9 @@ export default function BeatHiveApp() {
 
         {/* Conditional View Rendering */}
         {viewMode === 'globe' ? (
-          <SphereCarousel />
+          <SphereCarousel userRole={userRole} />
         ) : (
-          <ActionList />
+          <ActionList userRole={userRole} />
         )}
 
       </div>
@@ -788,7 +807,9 @@ export default function BeatHiveApp() {
   );
 }
 
-function ActionList() {
+function ActionList({ userRole }: { userRole: string }) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
   return (
     <div className="flex flex-col gap-3 w-full max-w-md mx-auto flex-1 overflow-y-auto pb-6 scrollbar-hide stylish-scrollbar">
       {HIVE_ITEMS.map((item, i) => (
@@ -797,23 +818,54 @@ function ActionList() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: i * 0.05 }}
           key={item.id}
-          className="bg-[#1a1a1a] border border-[#333] hover:border-yellow-500/50 hover:bg-[#222] transition-colors p-4 rounded-2xl flex items-center gap-4 cursor-pointer group"
+          className="bg-[#1a1a1a] border border-[#333] hover:border-yellow-500/50 transition-colors p-4 rounded-2xl flex flex-col gap-4 cursor-pointer group"
+          onClick={() => setExpandedId(expandedId === item.id ? null : item.id)}
         >
-          <div className="w-14 h-14 shrink-0 bg-[#222] group-hover:bg-gradient-to-br group-hover:from-yellow-400 group-hover:to-amber-600 rounded-xl flex items-center justify-center text-gray-400 group-hover:text-black transition-all shadow-md shape-octagon relative">
-            <div className="shape-octagon-inner bg-[#161616] group-hover:bg-transparent transition-colors z-0"></div>
-            <div className="relative z-10 scale-[0.6]">{item.icon}</div>
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 shrink-0 bg-[#222] group-hover:bg-gradient-to-br group-hover:from-yellow-400 group-hover:to-amber-600 rounded-xl flex items-center justify-center text-gray-400 group-hover:text-black transition-all shadow-md shape-octagon relative">
+              <div className="shape-octagon-inner bg-[#161616] group-hover:bg-transparent transition-colors z-0"></div>
+              <div className="relative z-10 scale-[0.6]">{item.icon}</div>
+            </div>
+            <div className="flex-1">
+              <h3 className="text-lg font-bold text-white group-hover:text-yellow-500 transition-colors mb-1">{item.title}</h3>
+              <p className="text-sm text-gray-400 leading-tight">{item.description}</p>
+            </div>
           </div>
-          <div className="flex-1">
-            <h3 className="text-lg font-bold text-white group-hover:text-yellow-500 transition-colors mb-1">{item.title}</h3>
-            <p className="text-sm text-gray-400 leading-tight">{item.description}</p>
-          </div>
+          
+          <AnimatePresence>
+            {item.id === 'vibes' && expandedId === 'vibes' && (
+              <motion.div 
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="pt-3 border-t border-white/10 flex flex-wrap gap-2">
+                  {GENRE_TALLIES.map((genre) => (
+                    <button 
+                      key={genre.name}
+                      onClick={(e) => e.stopPropagation()}
+                      className="group/btn px-3 py-1.5 rounded-full bg-[#222] border border-white/10 text-xs text-white hover:border-yellow-500 hover:text-yellow-500 transition-colors flex items-center gap-2"
+                    >
+                      <span>{genre.name}</span>
+                      {userRole === 'dj' && (
+                        <span className="bg-white/10 text-gray-400 group-hover/btn:bg-yellow-500/20 group-hover/btn:text-yellow-500 px-1.5 py-0.5 rounded text-[9px] font-mono leading-none transition-colors">
+                          {genre.count}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </motion.div>
       ))}
     </div>
   );
 }
 
-function SphereCarousel() {
+function SphereCarousel({ userRole }: { userRole: string }) {
   // Use framer-motion native performance values (0 React state re-renders during dragging!)
   const rotX = useMotionValue(initTargetX);
   const rotY = useMotionValue(initTargetY);
@@ -1023,6 +1075,29 @@ function SphereCarousel() {
             >
               <h3 className="text-2xl font-black text-yellow-500 mb-1 tracking-tight">{activeItem.title}</h3>
               <p className="text-sm font-medium text-gray-300 mb-3 px-4">{activeItem.description}</p>
+              
+              {activeId === 'vibes' && (
+                <motion.div 
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  className="flex flex-wrap justify-center gap-2 mb-4 px-4 max-h-[140px] overflow-y-auto scrollbar-hide stylish-scrollbar"
+                >
+                  {GENRE_TALLIES.map(genre => (
+                    <button 
+                      key={genre.name}
+                      className="group/btn px-3 py-1.5 rounded-full bg-[#222] border border-white/10 text-xs text-white hover:border-yellow-500 hover:text-yellow-500 transition-colors flex items-center gap-2"
+                    >
+                      <span>{genre.name}</span>
+                      {userRole === 'dj' && (
+                        <span className="bg-white/10 text-gray-400 group-hover/btn:bg-yellow-500/20 group-hover/btn:text-yellow-500 px-1.5 py-0.5 rounded text-[9px] font-mono leading-none transition-colors">
+                          {genre.count}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+
               <p className="text-[10px] text-[#555] font-bold tracking-widest uppercase">Drag freely • Tap to Snap</p>
             </motion.div>
         </AnimatePresence>
