@@ -180,6 +180,11 @@ function usePersistedState<T>(key: string, defaultValue: T): [T, React.Dispatch<
 // Main Entry Component
 export default function BeatHiveApp() {
   const { data: session } = useSession();
+    // YouTube search state
+    const [youtubeResults, setYoutubeResults] = useState<any[]>([]);
+    const [youtubeQuery, setYoutubeQuery] = useState("");
+    const [youtubeLoading, setYoutubeLoading] = useState(false);
+    const [youtubeError, setYoutubeError] = useState("");
   const [isClient, setIsClient] = useState(false);
 
   // Always force scroll to top on exact mounting of the main component
@@ -195,7 +200,7 @@ export default function BeatHiveApp() {
   // App navigation state
   const [viewMode, setViewMode] = usePersistedState<'globe' | 'list'>('bh_viewMode', 'globe');
   const [showSettings, setShowSettings] = usePersistedState('bh_showSettings', false);
-  const [musicSource, setMusicSource] = usePersistedState<'spotify' | 'apple' | null>('bh_musicSource', null);
+  const [musicSource, setMusicSource] = usePersistedState<'spotify' | 'apple' | 'youtube' | null>('bh_musicSource', null);
 
   // DJ State
   const [djRoomActive, setDjRoomActive] = usePersistedState('bh_djRoomActive', false);
@@ -736,6 +741,35 @@ export default function BeatHiveApp() {
                 <div>
                   <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-3">Music Source</h3>
                   <div className="grid grid-cols-1 gap-3">
+                                        <button 
+                                          onClick={async () => {
+                                            if (musicSource !== 'youtube') {
+                                              // Prompt Google login for YouTube
+                                              await signIn('google');
+                                              setMusicSource('youtube');
+                                            } else {
+                                              setMusicSource(null);
+                                            }
+                                          }}
+                                          className={`
+                                            w-full p-4 rounded-xl flex items-center justify-between border transition-all
+                                            ${musicSource === 'youtube' 
+                                              ? 'bg-[#FF0000]/10 border-[#FF0000] text-white shadow-[0_0_20px_rgba(255,0,0,0.15)]' 
+                                              : 'bg-[#111] border-white/10 text-gray-400 hover:border-white/20'
+                                            }
+                                          `}
+                                        >
+                                          <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 rounded-full bg-[#FF0000] flex items-center justify-center p-2 text-white">
+                                               {/* YouTube logo SVG */}
+                                               <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path d="M23.498 6.186a2.998 2.998 0 0 0-2.112-2.112C19.1 3.5 12 3.5 12 3.5s-7.1 0-9.386.574A2.998 2.998 0 0 0 .502 6.186C0 8.472 0 12 0 12s0 3.528.502 5.814a2.998 2.998 0 0 0 2.112 2.112C4.9 20.5 12 20.5 12 20.5s7.1 0 9.386-.574a2.998 2.998 0 0 0 2.112-2.112C24 15.528 24 12 24 12s0-3.528-.502-5.814zM9.545 15.568V8.432l6.545 3.568-6.545 3.568z"/></svg>
+                                            </div>
+                                            <span className="font-bold text-lg">YouTube</span>
+                                          </div>
+                                          <span className="text-xs font-semibold px-3 py-1 rounded-full bg-white/5 border border-white/10">
+                                            {musicSource === 'youtube' ? 'Connected' : 'Connect'}
+                                          </span>
+                                        </button>
                     <button 
                       onClick={() => {
                         if (session) {
@@ -866,6 +900,33 @@ function ActionList({ userRole }: { userRole: string }) {
 }
 
 function SphereCarousel({ userRole }: { userRole: string }) {
+      // Fix ReferenceError: snapToItem is not defined
+      const snapToItem = (item: any) => {
+        const targetX = Math.atan2(item.baseY, Math.sqrt(item.baseX**2 + item.baseZ**2));
+        const targetY = -Math.atan2(item.baseX, item.baseZ);
+        animate(rotX, getNearestAngle(rotX.get(), targetX), { type: 'spring', stiffness: 260, damping: 24, onUpdate: checkClosestItem });
+        animate(rotY, getNearestAngle(rotY.get(), targetY), { type: 'spring', stiffness: 260, damping: 24, onUpdate: checkClosestItem });
+      };
+    // Fix ReferenceError: snapToClosest is not defined
+    const snapToClosest = () => {
+      let maxZ = -Infinity;
+      let closestItem: any = null;
+      let cx = rotX.get();
+      let cy = rotY.get();
+
+      HIVE_ITEMS_3D.forEach(item => {
+        if (item.isBlank) return;
+        const p = rotate3D(item, cx, cy);
+        if (p.z > maxZ) {
+          maxZ = p.z;
+          closestItem = item;
+        }
+      });
+
+      if (closestItem) {
+        snapToItem(closestItem);
+      }
+    };
   // Use framer-motion native performance values (0 React state re-renders during dragging!)
   const rotX = useMotionValue(initTargetX);
   const rotY = useMotionValue(initTargetY);
@@ -915,69 +976,11 @@ function SphereCarousel({ userRole }: { userRole: string }) {
     const dx = e.clientX - prevTouch.current.x;
     const dy = e.clientY - prevTouch.current.y;
     
-    const now = Date.now();
-    const dt = now - lastTime.current;
-    if (dt > 0) {
-      velocity.current = { 
-         x: (velocity.current.x + dx / dt) / 2, 
-         y: (velocity.current.y + dy / dt) / 2 
-      };
-    }
-    lastTime.current = now;
-    
-    dragDistance.current += Math.abs(dx) + Math.abs(dy);
-
-    // Apple Maps style: X drag spins left/right (Y axis), Y drag spins up/down (X axis)
-    // Decreased sensitivity slightly for more "weighty" globe feel
-    rotY.set(rotY.get() + dx * 0.002);
-    
-    // Vertical rotation needs boundaries so you don't "flip upside down" confusingly
-    // We allow standard spinning but restrict full 360 pitch inversions
-    const newRotX = rotX.get() - dy * 0.002;
-    
-    // Lock vertical rotation (pitch) to roughly a 180-degree natural "front face" dome arc
-    // so the globe feels like it has a top and bottom pole! 
-    const VERTICAL_LIMIT = Math.PI / 2.2; 
-    const normalizedRotX = newRotX % (2 * Math.PI);
-    let clampedRotX = normalizedRotX;
-    
-    if (normalizedRotX > VERTICAL_LIMIT && normalizedRotX < Math.PI) clampedRotX = VERTICAL_LIMIT;
-    if (normalizedRotX < -VERTICAL_LIMIT && normalizedRotX > -Math.PI) clampedRotX = -VERTICAL_LIMIT;
-    
-    rotX.set(clampedRotX);
-    
-    prevTouch.current = { x: e.clientX, y: e.clientY };
-    checkClosestItem();
-  };
-
-  const snapToItem = (item: any) => {
-    const targetX = Math.atan2(item.baseY, Math.sqrt(item.baseX**2 + item.baseZ**2));
-    const targetY = -Math.atan2(item.baseX, item.baseZ);
-    
-    // Snap accurately using physics directly bypassing react state lag
-    animate(rotX, getNearestAngle(rotX.get(), targetX), { type: 'spring', stiffness: 260, damping: 24, onUpdate: checkClosestItem });
-    animate(rotY, getNearestAngle(rotY.get(), targetY), { type: 'spring', stiffness: 260, damping: 24, onUpdate: checkClosestItem });
-  };
-
-  const snapToClosest = () => {
-    let maxZ = -Infinity;
-    let closestItem: any = null;
-    let cx = rotX.get();
-    let cy = rotY.get();
-
-    HIVE_ITEMS_3D.forEach(item => {
-       if (item.isBlank) return; 
-       
-       const p = rotate3D(item, cx, cy);
-       if (p.z > maxZ) {
-          maxZ = p.z;
-          closestItem = item;
-       }
+    const zIndex = useTransform(() => {
+       const currentZ = z.get();
+       // Layer objects strictly by their actual Z depth so they never bleed through each other
+       return Math.round(currentZ + RADIUS) + (isActive ? 1000 : 0);
     });
-
-    if (closestItem) {
-       snapToItem(closestItem);
-    }
   };
 
   const handlePointerUp = () => {
@@ -1128,11 +1131,11 @@ function SphereItem({ item, rotX, rotY, isActive, onClick }: any) {
      return 1;
   });
   
-  const zIndex = useTransform(() => {
+    const zIndex = useTransform(() => {
      const currentZ = z.get();
      // Layer objects strictly by their actual Z depth so they never bleed through each other
      return Math.round(currentZ + RADIUS) + (isActive ? 1000 : 0);
-  });
+    });
 
   // Calculate true spherical projection rotations so the flat shapes perfectly physically curve
   // along the surface body of the bounding sphere wrapper.
