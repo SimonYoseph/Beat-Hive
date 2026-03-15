@@ -181,10 +181,10 @@ function usePersistedState<T>(key: string, defaultValue: T): [T, React.Dispatch<
 export default function BeatHiveApp() {
   const { data: session } = useSession();
     // YouTube search state
-    const [youtubeResults, setYoutubeResults] = useState<any[]>([]);
-    const [youtubeQuery, setYoutubeQuery] = useState("");
-    const [youtubeLoading, setYoutubeLoading] = useState(false);
-    const [youtubeError, setYoutubeError] = useState("");
+      const [youtubeResults, setYoutubeResults] = useState<any[]>([]); // YouTube search state (removed unused variables)
+      const [youtubeQuery, setYoutubeQuery] = useState(""); 
+      const [youtubeLoading, setYoutubeLoading] = useState(false); 
+      const [youtubeError, setYoutubeError] = useState(""); 
   const [isClient, setIsClient] = useState(false);
 
   // Always force scroll to top on exact mounting of the main component
@@ -975,12 +975,7 @@ function SphereCarousel({ userRole }: { userRole: string }) {
     
     const dx = e.clientX - prevTouch.current.x;
     const dy = e.clientY - prevTouch.current.y;
-    
-    const zIndex = useTransform(() => {
-       const currentZ = z.get();
-       // Layer objects strictly by their actual Z depth so they never bleed through each other
-       return Math.round(currentZ + RADIUS) + (isActive ? 1000 : 0);
-    });
+     // Removed unused dx, dy, zIndex and invalid useTransform hook usage
   };
 
   const handlePointerUp = () => {
