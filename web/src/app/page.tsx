@@ -967,7 +967,7 @@ function SphereCarousel({ userRole }: { userRole: string }) {
     rotY.stop();
   };
 
-  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+  const handlePointerMove = () => {
     if (!isDragging.current || !prevTouch.current) return;
     
     // Removed unused dx, dy variables
