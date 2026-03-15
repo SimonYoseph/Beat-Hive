@@ -181,10 +181,7 @@ function usePersistedState<T>(key: string, defaultValue: T): [T, React.Dispatch<
 export default function BeatHiveApp() {
   const { data: session } = useSession();
     // YouTube search state
-      const [youtubeResults, setYoutubeResults] = useState<any[]>([]); // YouTube search state (removed unused variables)
-      const [youtubeQuery, setYoutubeQuery] = useState(""); 
-      const [youtubeLoading, setYoutubeLoading] = useState(false); 
-      const [youtubeError, setYoutubeError] = useState(""); 
+      // Removed unused YouTube search state variables
   const [isClient, setIsClient] = useState(false);
 
   // Always force scroll to top on exact mounting of the main component
@@ -973,8 +970,7 @@ function SphereCarousel({ userRole }: { userRole: string }) {
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!isDragging.current || !prevTouch.current) return;
     
-    const dx = e.clientX - prevTouch.current.x;
-    const dy = e.clientY - prevTouch.current.y;
+    // Removed unused dx, dy variables
      // Removed unused dx, dy, zIndex and invalid useTransform hook usage
   };
 
