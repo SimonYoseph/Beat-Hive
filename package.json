@@ -1,9 +1,28 @@
 {
+  "name": "beat-hive",
+  "private": true,
   "scripts": {
-    "dev": "next dev"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
   },
   "dependencies": {
     "@auth/core": "^0.34.3",
-    "next-auth": "^4.24.13"
+    "framer-motion": "^12.40.0",
+    "lucide-react": "^1.17.0",
+    "next": "^16.1.6",
+    "next-auth": "^4.24.14",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "eslint": "^9.0.0",
+    "eslint-config-next": "^16.1.6",
+    "postcss": "^8.0.0",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5.9.3"
   }
 }
