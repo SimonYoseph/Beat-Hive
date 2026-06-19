@@ -1,6 +1,12 @@
 # Beat Hive
- 
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+
+Join the crowd. Control the music. Tip the Host.
+
+## 🚀 Live Demo
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/SimonYoseph/Beat-Hive)
+
+Want to test Beat Hive? Click the button above to deploy it to Vercel in one click, or visit our [live demo](https://beat-hive.vercel.app) (once deployed).
 
 ## Getting Started
 
