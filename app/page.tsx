@@ -1379,27 +1379,6 @@ function SphereCarousel({ userRole, energyPreference, onEnergyChange }: { userRo
     return () => stopInertia();
   }, []);
 
-  const checkClosestItem = () => {
-    if (isSnapping.current) return;
-    let maxZ = -Infinity;
-    let closestItem: any = null;
-    const cx = rotX.get();
-    const cy = rotY.get();
-
-    HIVE_ITEMS_3D.forEach(item => {
-      if (item.isBlank) return; 
-      const p = rotate3D(item, cx, cy);
-      if (p.z > maxZ) {
-        maxZ = p.z;
-        closestItem = item;
-      }
-    });
-
-    if (closestItem) {
-      setActiveId((prev) => (prev !== closestItem.id ? closestItem.id : prev));
-    }
-  };
-
   const snapToItem = (item: any) => {
     stopInertia();
     rotX.stop();
@@ -1502,7 +1481,6 @@ function SphereCarousel({ userRole, energyPreference, onEnergyChange }: { userRo
     lastTime.current = now;
     lastMoveTime.current = now;
 
-    checkClosestItem();
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -1567,8 +1545,6 @@ function SphereCarousel({ userRole, energyPreference, onEnergyChange }: { userRo
 
         rotY.set(nextY);
         rotX.set(nextX);
-        checkClosestItem();
-
         const curSpeed = Math.hypot(velocity.current.x, velocity.current.y);
         if (curSpeed > 0.00008) {
           animFrameRef.current = requestAnimationFrame(tick);
@@ -1598,7 +1574,6 @@ function SphereCarousel({ userRole, energyPreference, onEnergyChange }: { userRo
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
-        onPointerLeave={handlePointerUp}
         onPointerCancel={handlePointerUp}
         style={{ perspective: "1000px", transformStyle: "preserve-3d", touchAction: 'none', WebkitTapHighlightColor: 'transparent' }}
       >
