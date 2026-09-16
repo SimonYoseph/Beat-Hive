@@ -961,6 +961,7 @@ function SphereCarousel({ userRole }: { userRole: string }) {
   const [activeId, setActiveId] = useState(ALL_ITEMS[0].id);
 
   const isDragging = useRef(false);
+  const isSnapping = useRef(false);
   const dragDistance = useRef(0);
   const prevTouch = useRef<{ x: number; y: number } | null>(null);
   const velocity = useRef({ x: 0, y: 0 });
@@ -980,6 +981,7 @@ function SphereCarousel({ userRole }: { userRole: string }) {
   }, []);
 
   const checkClosestItem = () => {
+    if (isSnapping.current) return;
     let maxZ = -Infinity;
     let closestItem: any = null;
     const cx = rotX.get();
@@ -1003,19 +1005,31 @@ function SphereCarousel({ userRole }: { userRole: string }) {
     stopInertia();
     rotX.stop();
     rotY.stop();
-    const { targetX, targetY } = getTargetAnglesForItem(item);
+    isSnapping.current = true;
     setActiveId(item.id);
+    const { targetX, targetY } = getTargetAnglesForItem(item);
+    
+    let doneX = false;
+    let doneY = false;
+    const onDone = () => {
+      if (doneX && doneY) {
+        isSnapping.current = false;
+      }
+    };
+
     animate(rotX, getNearestAngle(rotX.get(), targetX), { 
       type: 'spring', 
-      stiffness: 260, 
-      damping: 26, 
-      onUpdate: checkClosestItem 
+      stiffness: 280, 
+      damping: 28,
+      mass: 0.9,
+      onComplete: () => { doneX = true; onDone(); }
     });
     animate(rotY, getNearestAngle(rotY.get(), targetY), { 
       type: 'spring', 
-      stiffness: 260, 
-      damping: 26, 
-      onUpdate: checkClosestItem 
+      stiffness: 280, 
+      damping: 28,
+      mass: 0.9,
+      onComplete: () => { doneY = true; onDone(); }
     });
   };
 
@@ -1043,6 +1057,7 @@ function SphereCarousel({ userRole }: { userRole: string }) {
     stopInertia();
     rotX.stop();
     rotY.stop();
+    isSnapping.current = false;
     isDragging.current = true;
     dragDistance.current = 0;
     prevTouch.current = { x: e.clientX, y: e.clientY };
@@ -1103,7 +1118,6 @@ function SphereCarousel({ userRole }: { userRole: string }) {
     } catch {}
 
     const now = performance.now();
-    // If the pointer paused before release, remove momentum
     if (now - lastMoveTime.current > 75) {
       velocity.current = { x: 0, y: 0 };
     }
@@ -1129,7 +1143,6 @@ function SphereCarousel({ userRole }: { userRole: string }) {
     }
 
     if (speed > 0.0003) {
-      // Fluid inertial glide with friction decay (Google Maps / Apple Maps momentum physics)
       let lastFrame = performance.now();
       const FRICTION = 0.94;
       const VERTICAL_LIMIT = Math.PI / 2.2;
@@ -1147,7 +1160,7 @@ function SphereCarousel({ userRole }: { userRole: string }) {
 
         if (nextX > VERTICAL_LIMIT) {
           nextX = VERTICAL_LIMIT;
-          velocity.current.y = -velocity.current.y * 0.3; // Soft cushion bounce
+          velocity.current.y = -velocity.current.y * 0.3;
         } else if (nextX < -VERTICAL_LIMIT) {
           nextX = -VERTICAL_LIMIT;
           velocity.current.y = -velocity.current.y * 0.3;
@@ -1182,7 +1195,7 @@ function SphereCarousel({ userRole }: { userRole: string }) {
     <div className="relative w-full max-w-[420px] mx-auto flex flex-col items-center justify-start flex-1 -mt-2">
       {/* Universal Drag Container allowing all axes */}
       <div 
-        className="relative w-full h-[380px] flex items-center justify-center cursor-grab active:cursor-grabbing shrink-0 select-none"
+        className="relative w-full h-[380px] flex items-center justify-center cursor-grab active:cursor-grabbing shrink-0 select-none overflow-hidden"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
@@ -1210,15 +1223,15 @@ function SphereCarousel({ userRole }: { userRole: string }) {
         <AnimatePresence mode="wait">
             <motion.div
               key={activeId}
-              initial={{ opacity: 0, scale: 0.9, y: 15 }}
+              initial={{ opacity: 0, scale: 0.95, y: 8 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: -15 }}
-              transition={{ duration: 0.2 }}
+              exit={{ opacity: 0, scale: 0.95, y: -8 }}
+              transition={{ duration: 0.15 }}
             >
               <h3 className="text-2xl font-black text-yellow-500 mb-1 tracking-tight">{activeItem.title}</h3>
               <p className="text-sm font-medium text-gray-300 mb-3 px-4">{activeItem.description}</p>
               
-              {activeId === 'vibes' && (
+              {activeId.startsWith('vibes') && (
                 <motion.div 
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: 'auto' }}
@@ -1248,34 +1261,47 @@ function SphereCarousel({ userRole }: { userRole: string }) {
   );
 }
 
-// Binds native Framer DOM outputs avoiding lag
+// Binds native Framer DOM outputs avoiding lag and hiding non-view side/back items
 function SphereItem({ item, rotX, rotY, isActive, onClick }: any) {
-  const x = useTransform(() => rotate3D(item, rotX.get(), rotY.get()).x);
-  const y = useTransform(() => rotate3D(item, rotX.get(), rotY.get()).y);
-  
-  // Calculate raw Z to use for perspective warping and scaling
-  const z = useTransform(() => rotate3D(item, rotX.get(), rotY.get()).z);
+  const transformData = useTransform([rotX, rotY], ([rx, ry]: number[]) => {
+    const p = rotate3D(item, rx, ry);
+    const zVal = p.z;
+    
+    // Strict front-facing horizon mask so off-view/side/back elements are cleanly removed
+    const isVisible = zVal >= 60;
+    const opacityVal = zVal < 60 ? 0 : zVal < 120 ? (zVal - 60) / 60 : 1;
+    const perspectiveScale = 0.78 + 0.22 * ((Math.max(0, zVal) + RADIUS) / (2 * RADIUS));
+    const scaleVal = (isActive ? 1.15 : 1.0) * perspectiveScale;
+    
+    const distXZ = Math.sqrt(p.x * p.x + p.z * p.z);
+    const rotYDeg = Math.atan2(p.x, Math.max(1, p.z)) * (180 / Math.PI);
+    const rotXDeg = -Math.atan2(p.y, distXZ) * (180 / Math.PI);
+    const zIndexVal = Math.round(zVal + RADIUS) + (isActive ? 1000 : 0);
 
-  const scale = useTransform(() => {
-     const currentZ = z.get();
-     const perspectiveScale = 0.72 + 0.28 * ((currentZ + RADIUS) / (2 * RADIUS));
-     return (isActive ? 1.15 : 1.0) * perspectiveScale; 
+    return {
+      x: p.x,
+      y: p.y,
+      z: zVal,
+      scale: scaleVal,
+      opacity: opacityVal,
+      zIndex: zIndexVal,
+      rotateX: rotXDeg,
+      rotateY: rotYDeg,
+      visibility: isVisible ? 'visible' : 'hidden',
+      pointerEvents: opacityVal > 0.4 ? 'auto' : 'none'
+    };
   });
-  
-  const opacity = useTransform(() => {
-     const currentZ = z.get();
-     if (currentZ < 10) return 0;
-     if (currentZ < 90) return (currentZ - 10) / 80; 
-     return 1;
-  });
-  
-    const zIndex = useTransform(() => {
-     const currentZ = z.get();
-     return Math.round(currentZ + RADIUS) + (isActive ? 1000 : 0);
-    });
 
-  const rotateY = useTransform(() => { const p = rotate3D(item, rotX.get(), rotY.get()); return Math.atan2(p.x, p.z) * (180 / Math.PI); }); 
-  const rotateX = useTransform(() => { const p = rotate3D(item, rotX.get(), rotY.get()); const distXZ = Math.sqrt(p.x*p.x + p.z*p.z); return -Math.atan2(p.y, distXZ) * (180 / Math.PI); });
+  const x = useTransform(transformData, (d) => d.x);
+  const y = useTransform(transformData, (d) => d.y);
+  const z = useTransform(transformData, (d) => d.z);
+  const scale = useTransform(transformData, (d) => d.scale);
+  const opacity = useTransform(transformData, (d) => d.opacity);
+  const zIndex = useTransform(transformData, (d) => d.zIndex);
+  const rotateX = useTransform(transformData, (d) => d.rotateX);
+  const rotateY = useTransform(transformData, (d) => d.rotateY);
+  const visibility = useTransform(transformData, (d) => d.visibility);
+  const pointerEvents = useTransform(transformData, (d) => d.pointerEvents as any);
 
   return (
     <motion.div
@@ -1283,6 +1309,8 @@ function SphereItem({ item, rotX, rotY, isActive, onClick }: any) {
       style={{ 
         x, y, z, scale, opacity, zIndex, 
         rotateX, rotateY,
+        visibility,
+        pointerEvents,
         marginLeft: '-53px', marginTop: '-53px' 
       }}
       className={`absolute left-1/2 top-1/2 select-none ${item.isBlank ? 'pointer-events-none' : 'cursor-pointer'}`}
@@ -1295,10 +1323,7 @@ function SphereItem({ item, rotX, rotY, isActive, onClick }: any) {
 
 function HiveButton({ title, icon, featured = false, isBlank = false }: { title: string; icon: React.ReactNode; featured?: boolean; isBlank?: boolean; }) {
   return (
-    <motion.div 
-      animate={{ z: featured ? 30 : 0 }}
-      whileHover={!isBlank ? { scale: 1.05 } : undefined}
-      whileTap={!isBlank ? { scale: 0.95 } : undefined}
+    <div
       className={`
         w-[106px] h-[106px] 
         flex flex-col items-center justify-center 
@@ -1310,7 +1335,7 @@ function HiveButton({ title, icon, featured = false, isBlank = false }: { title:
       {/* Background Hexagon Container */}
       <div className={`
         shape-octagon 
-        transition-colors duration-400 ease-out
+        transition-colors duration-300 ease-out
         ${featured 
           ? 'bg-gradient-to-br from-yellow-400 to-amber-600 shadow-[0_0_40px_rgba(245,158,11,0.6)]' 
           : isBlank 
@@ -1330,11 +1355,11 @@ function HiveButton({ title, icon, featured = false, isBlank = false }: { title:
           ${featured ? 'text-[#111]' : 'text-gray-400 group-hover:text-yellow-500 transition-colors'}
         `}>
           {icon}
-          <span className={`text-[10px] uppercase tracking-widest transition-opacity duration-300 font-bold ${featured ? 'font-black text-xs text-[#111] opacity-100' : 'opacity-0'}`}>
+          <span className={`text-[11px] font-bold tracking-tight uppercase leading-none ${featured ? 'text-black font-black' : 'text-gray-400'}`}>
             {title}
           </span>
         </div>
       )}
-    </motion.div>
+    </div>
   );
 }
