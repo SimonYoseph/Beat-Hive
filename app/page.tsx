@@ -132,9 +132,18 @@ const getNearestAngle = (current: number, target: number) => {
   return current + diff;
 };
 
+// Calculate exact target rotation angles (rotX, rotY) to bring any item to (0, 0, RADIUS) facing straight on
+const getTargetAnglesForItem = (item: { baseX: number; baseY: number; baseZ: number }) => {
+  const targetX = Math.atan2(item.baseY, item.baseZ);
+  const z1 = Math.sqrt(item.baseY ** 2 + item.baseZ ** 2);
+  const targetY = -Math.atan2(item.baseX, z1);
+  return { targetX, targetY };
+};
+
 // Start the math with the exact required rotation to have the first item facing direct Front-Center
-const initTargetX = Math.atan2(HIVE_ITEMS_3D[0].baseY, Math.sqrt(HIVE_ITEMS_3D[0].baseX**2 + HIVE_ITEMS_3D[0].baseZ**2));
-const initTargetY = -Math.atan2(HIVE_ITEMS_3D[0].baseX, HIVE_ITEMS_3D[0].baseZ);
+const initAngles = getTargetAnglesForItem(HIVE_ITEMS_3D[0]);
+const initTargetX = initAngles.targetX;
+const initTargetY = initAngles.targetY;
 
 // A reusable hook to persist state to localStorage and sync between tabs
 function usePersistedState<T>(key: string, defaultValue: T): [T, React.Dispatch<React.SetStateAction<T>>] {
@@ -995,10 +1004,20 @@ function SphereCarousel({ userRole }: { userRole: string }) {
     stopInertia();
     rotX.stop();
     rotY.stop();
-    const targetX = Math.atan2(item.baseY, Math.sqrt(item.baseX ** 2 + item.baseZ ** 2));
-    const targetY = -Math.atan2(item.baseX, item.baseZ);
-    animate(rotX, getNearestAngle(rotX.get(), targetX), { type: 'spring', stiffness: 220, damping: 26, onUpdate: checkClosestItem });
-    animate(rotY, getNearestAngle(rotY.get(), targetY), { type: 'spring', stiffness: 220, damping: 26, onUpdate: checkClosestItem });
+    const { targetX, targetY } = getTargetAnglesForItem(item);
+    setActiveId(item.id);
+    animate(rotX, getNearestAngle(rotX.get(), targetX), { 
+      type: 'spring', 
+      stiffness: 260, 
+      damping: 26, 
+      onUpdate: checkClosestItem 
+    });
+    animate(rotY, getNearestAngle(rotY.get(), targetY), { 
+      type: 'spring', 
+      stiffness: 260, 
+      damping: 26, 
+      onUpdate: checkClosestItem 
+    });
   };
 
   const snapToClosest = () => {
@@ -1092,6 +1111,24 @@ function SphereCarousel({ userRole }: { userRole: string }) {
 
     const speed = Math.hypot(velocity.current.x, velocity.current.y);
 
+    if (dragDistance.current < 15) {
+      // Direct tap detection on touch or click
+      if (typeof document !== 'undefined') {
+        const targetEl = document.elementFromPoint(e.clientX, e.clientY);
+        const itemEl = targetEl?.closest('[data-item-id]');
+        const clickedId = itemEl?.getAttribute('data-item-id');
+        if (clickedId) {
+          const clickedItem = HIVE_ITEMS_3D.find(it => it.id === clickedId);
+          if (clickedItem) {
+            snapToItem(clickedItem);
+            return;
+          }
+        }
+      }
+      snapToClosest();
+      return;
+    }
+
     if (speed > 0.0003) {
       // Fluid inertial glide with friction decay (Google Maps / Apple Maps momentum physics)
       let lastFrame = performance.now();
@@ -1137,9 +1174,7 @@ function SphereCarousel({ userRole }: { userRole: string }) {
   };
 
   const handleClickItem = (item: any) => {
-    if (dragDistance.current < 12) {
-      snapToItem(item);
-    }
+    snapToItem(item);
   };
 
   const activeItem = ALL_ITEMS.find(i => i.id === activeId) || ALL_ITEMS[0];
@@ -1245,12 +1280,13 @@ function SphereItem({ item, rotX, rotY, isActive, onClick }: any) {
 
   return (
     <motion.div
+      data-item-id={item.id}
       style={{ 
         x, y, z, scale, opacity, zIndex, 
         rotateX, rotateY,
         marginLeft: '-53px', marginTop: '-53px' 
       }}
-      className={`absolute left-1/2 top-1/2 select-none ${item.isBlank ? 'pointer-events-none' : ''}`}
+      className={`absolute left-1/2 top-1/2 select-none ${item.isBlank ? 'pointer-events-none' : 'cursor-pointer'}`}
       onClick={item.isBlank ? undefined : onClick}
     >
       <HiveButton title={item.title} icon={item.icon} featured={isActive} isBlank={item.isBlank} />
