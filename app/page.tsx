@@ -192,6 +192,13 @@ export default function BeatHiveApp() {
   }, []);
 
   const [isAuthenticated, setIsAuthenticated] = usePersistedState('bh_isAuthenticated', false);
+
+  useEffect(() => {
+    if (session) {
+      setIsAuthenticated(true);
+    }
+  }, [session, setIsAuthenticated]);
+
   const [userRole, setUserRole] = usePersistedState<'none' | 'dj' | 'guest'>('bh_userRole', 'none');
   const [hasAccess, setHasAccess] = usePersistedState('bh_hasAccess', false); // Guest room access
   
@@ -276,7 +283,8 @@ export default function BeatHiveApp() {
   };
 
   // State 1: User needs to Sign In / Create Account
-  if (!isAuthenticated) {
+  const isUserLoggedIn = isAuthenticated || Boolean(session);
+  if (!isUserLoggedIn) {
     return (
       <main className="min-h-[100dvh] flex flex-col items-center justify-center p-6 text-center bg-[#111] overflow-hidden relative">
         {/* Background ambient light */}
@@ -339,8 +347,11 @@ export default function BeatHiveApp() {
     return (
       <main className="min-h-[100dvh] flex flex-col items-center justify-center p-6 text-center bg-[#111] relative">
         <button
-          onClick={() => {
+          onClick={async () => {
             setIsAuthenticated(false);
+            if (session) {
+              await signOut({ redirect: false });
+            }
             window.scrollTo(0, 0);
           }}
           className="absolute top-6 left-6 p-2 rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors flex items-center gap-2"
