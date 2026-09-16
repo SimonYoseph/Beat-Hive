@@ -5,6 +5,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import NextLink from 'next/link';
+import ReactPlayer from "react-player";
 import { 
   Music, 
   ThumbsUp, 
@@ -26,7 +27,14 @@ import {
   Settings2,
   Copy,
   EyeOff,
-  Link
+  Link,
+  ChevronDown,
+  LogOut,
+  Pause,
+  Play,
+  Flame,
+  SkipForward,
+  Volume1,
 } from "lucide-react";
 import { signIn, signOut, useSession } from "next-auth/react";
 import { motion, AnimatePresence, useMotionValue, animate, useTransform } from "framer-motion";
@@ -48,7 +56,7 @@ const GENRE_TALLIES = [
 const HIVE_ITEMS = [
   { id: 'request', title: "Request", description: "Search and request a song for the queue", icon: <Search size={36} strokeWidth={2.5} /> },
   { id: 'queue', title: "Queue", description: "View what's coming up next", icon: <ListMusic size={32} /> },
-  { id: 'energy', title: "Energy", description: "Tell the DJ to bring the heat up or down", icon: <Speaker size={32} /> },
+  { id: 'energy', title: "Energy", description: "Tell the DJ to bring the heat up or down", icon: <Flame size={32} /> },
   { id: 'upvote', title: "Upvote", description: "Vote for currently queued tracks", icon: <ThumbsUp size={32} /> },
   { id: 'vibes', title: "Vibes", description: "Let the DJ know you're feeling the set", icon: <Music size={32} /> },
   { id: 'shoutout', title: "Shoutout", description: "Send a message to the DJ booth", icon: <MessageSquare size={32} /> },
@@ -148,6 +156,7 @@ const initTargetY = initAngles.targetY;
 // A reusable hook to persist state to localStorage and sync between tabs
 function usePersistedState<T>(key: string, defaultValue: T): [T, React.Dispatch<React.SetStateAction<T>>] {
   const [state, setState] = useState<T>(defaultValue);
+  const [hasLoaded, setHasLoaded] = useState(false);
 
   useEffect(() => {
     try {
@@ -157,16 +166,19 @@ function usePersistedState<T>(key: string, defaultValue: T): [T, React.Dispatch<
       }
     } catch (e) {
       console.error("Error reading localStorage", e);
+    } finally {
+      setHasLoaded(true);
     }
   }, [key]);
 
   useEffect(() => {
+    if (!hasLoaded) return;
     try {
       window.localStorage.setItem(key, JSON.stringify(state));
     } catch (e) {
       console.error("Error setting localStorage", e);
     }
-  }, [key, state]);
+  }, [hasLoaded, key, state]);
 
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
@@ -187,17 +199,73 @@ function usePersistedState<T>(key: string, defaultValue: T): [T, React.Dispatch<
   return [state, setState];
 }
 
+type NowPlayingTrack = {
+  videoId?: string;
+  title: string;
+  channelTitle: string;
+  thumbnail?: string;
+};
+
+type YoutubeSearchResult = {
+  id: { videoId?: string };
+  snippet: {
+    title: string;
+    channelTitle: string;
+    thumbnails: { medium?: { url: string }; default?: { url: string } };
+  };
+};
+
+type SyncedSettings = {
+  userRole?: 'none' | 'dj' | 'guest';
+  hasAccess?: boolean;
+  viewMode?: 'globe' | 'list';
+  musicSource?: 'spotify' | 'apple' | 'youtube' | null;
+  isAnonymousDJ?: boolean;
+  customIcon?: string | null;
+  energyPreference?: 'up' | 'down' | null;
+};
+
 // Main Entry Component
 export default function BeatHiveApp() {
   const { data: session } = useSession();
+  const userEmail = session?.user?.email;
     // YouTube search state
       // Removed unused YouTube search state variables
   const [isClient, setIsClient] = useState(false);
+  const [nowPlaying, setNowPlaying] = useState<NowPlayingTrack | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const isFindingVibeTrack = useRef(false);
 
   // Always force scroll to top on exact mounting of the main component
   useEffect(() => {
     setIsClient(true);
     window.scrollTo(0, 0);
+  }, []);
+
+  useEffect(() => {
+    function loadNowPlaying() {
+      try {
+        const savedTrack = window.localStorage.getItem('bh_now_playing');
+        if (savedTrack) {
+          setNowPlaying(JSON.parse(savedTrack));
+          if (window.localStorage.getItem('bh_queue_autoplay') === 'true') {
+            window.localStorage.removeItem('bh_queue_autoplay');
+            setIsPlaying(true);
+          }
+          return;
+        }
+
+        const savedQueue = window.localStorage.getItem('bh_play_queue');
+        const firstTrack = savedQueue ? JSON.parse(savedQueue)[0] : null;
+        if (firstTrack && typeof firstTrack !== 'string') setNowPlaying(firstTrack);
+      } catch {
+        setNowPlaying(null);
+      }
+    }
+
+    loadNowPlaying();
+    window.addEventListener('storage', loadNowPlaying);
+    return () => window.removeEventListener('storage', loadNowPlaying);
   }, []);
 
   const [isAuthenticated, setIsAuthenticated] = usePersistedState('bh_isAuthenticated', false);
@@ -214,16 +282,71 @@ export default function BeatHiveApp() {
   // App navigation state
   const [viewMode, setViewMode] = usePersistedState<'globe' | 'list'>('bh_viewMode', 'globe');
   const [showSettings, setShowSettings] = usePersistedState('bh_showSettings', false);
+  const [showMusicSources, setShowMusicSources] = useState(false);
   const [musicSource, setMusicSource] = usePersistedState<'spotify' | 'apple' | 'youtube' | null>('bh_musicSource', null);
+  const [customIcon, setCustomIcon] = usePersistedState<string | null>('bh_customIcon', null);
+  const customIconInputRef = useRef<HTMLInputElement>(null);
 
   // DJ State
   const [djRoomActive, setDjRoomActive] = usePersistedState('bh_djRoomActive', false);
   const [isAnonymousDJ, setIsAnonymousDJ] = usePersistedState('bh_isAnonymousDJ', false);
+  const [energyPreference, setEnergyPreference] = usePersistedState<'up' | 'down' | null>('bh_energyPreference', null);
   const [djPreviewingGuest, setDjPreviewingGuest] = usePersistedState('bh_djPreviewingGuest', false);
   const [djQrExpanded, setDjQrExpanded] = usePersistedState('bh_djQrExpanded', false);
 
   // Guest State
   const [qrExpanded, setQrExpanded] = usePersistedState('bh_qrExpanded', false);
+  const [remoteSettingsLoaded, setRemoteSettingsLoaded] = useState(false);
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    async function loadRemoteSettings() {
+      if (!userEmail) {
+        setRemoteSettingsLoaded(true);
+        return;
+      }
+
+      setRemoteSettingsLoaded(false);
+      try {
+        const response = await fetch('/api/settings');
+        if (!response.ok) return;
+        const { settings } = (await response.json()) as { settings: SyncedSettings };
+        if (!isCurrent) return;
+
+        if (settings.userRole) setUserRole(settings.userRole);
+        if (typeof settings.hasAccess === 'boolean') setHasAccess(settings.hasAccess);
+        if (settings.viewMode) setViewMode(settings.viewMode);
+        if (settings.musicSource !== undefined) setMusicSource(settings.musicSource);
+        if (typeof settings.isAnonymousDJ === 'boolean') setIsAnonymousDJ(settings.isAnonymousDJ);
+        if (settings.customIcon !== undefined) setCustomIcon(settings.customIcon);
+        if (settings.energyPreference !== undefined) setEnergyPreference(settings.energyPreference);
+      } catch {
+        // Local storage remains available when the settings store cannot be reached.
+      } finally {
+        if (isCurrent) setRemoteSettingsLoaded(true);
+      }
+    }
+
+    void loadRemoteSettings();
+    return () => { isCurrent = false; };
+  }, [userEmail]);
+
+  useEffect(() => {
+    if (!userEmail || !remoteSettingsLoaded) return;
+
+    const timeout = window.setTimeout(() => {
+      void fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          settings: { userRole, hasAccess, viewMode, musicSource, isAnonymousDJ, customIcon, energyPreference },
+        }),
+      });
+    }, 400);
+
+    return () => window.clearTimeout(timeout);
+  }, [customIcon, energyPreference, hasAccess, isAnonymousDJ, musicSource, remoteSettingsLoaded, userEmail, userRole, viewMode]);
 
   if (!isClient) return null; // Prevent hydration flash on first render
 
@@ -245,6 +368,119 @@ export default function BeatHiveApp() {
   const handleScanAccess = () => {
     setHasAccess(true);
     window.scrollTo(0, 0);
+  };
+
+  const recordPlayedTrack = () => {
+    if (!nowPlaying?.videoId) return;
+
+    try {
+      const history = JSON.parse(window.localStorage.getItem('bh_play_history') || '[]') as NowPlayingTrack[];
+      if (history.at(-1)?.videoId === nowPlaying.videoId) return;
+      window.localStorage.setItem('bh_play_history', JSON.stringify([...history, nowPlaying].slice(-50)));
+    } catch {
+      window.localStorage.setItem('bh_play_history', JSON.stringify([nowPlaying]));
+    }
+  };
+
+  const handleNextTrack = () => {
+    try {
+      const queue = JSON.parse(window.localStorage.getItem('bh_play_queue') || '[]') as NowPlayingTrack[];
+      const currentIndex = queue.findIndex((track) => track.videoId === nowPlaying?.videoId);
+      const nextTrack = queue[currentIndex + 1];
+      if (!nextTrack) return;
+
+      window.localStorage.setItem('bh_now_playing', JSON.stringify(nextTrack));
+      setNowPlaying(nextTrack);
+      setIsPlaying(true);
+    } catch {
+      // Keep the current track active if the queue cannot be read.
+    }
+  };
+
+  const handleTrackEnded = async () => {
+    try {
+      const queue = JSON.parse(window.localStorage.getItem('bh_play_queue') || '[]') as NowPlayingTrack[];
+      const currentIndex = queue.findIndex((track) => track.videoId === nowPlaying?.videoId);
+      const nextTrack = queue[currentIndex + 1];
+      if (nextTrack) {
+        window.localStorage.setItem('bh_now_playing', JSON.stringify(nextTrack));
+        setNowPlaying(nextTrack);
+        return;
+      }
+
+      const requests = JSON.parse(window.localStorage.getItem('bh_youtube_requests') || '[]') as Array<NowPlayingTrack & { upvotes?: number }>;
+      const promotedRequest = requests
+        .filter((track) => (track.upvotes || 0) > 0 && !queue.some((queuedTrack) => queuedTrack.videoId === track.videoId))
+        .sort((firstTrack, secondTrack) => (secondTrack.upvotes || 0) - (firstTrack.upvotes || 0))[0];
+      if (promotedRequest) {
+        const nextQueue = [...queue, promotedRequest];
+        window.localStorage.setItem('bh_play_queue', JSON.stringify(nextQueue));
+        window.localStorage.setItem('bh_now_playing', JSON.stringify(promotedRequest));
+        setNowPlaying(promotedRequest);
+        setIsPlaying(true);
+        return;
+      }
+
+      if (currentIndex < 0 || isFindingVibeTrack.current) {
+        setIsPlaying(false);
+        return;
+      }
+
+      isFindingVibeTrack.current = true;
+      const recentTracks = queue.slice(Math.max(0, currentIndex - 1), currentIndex + 1);
+      const vibeQuery = recentTracks.map((track) => `${track.title} ${track.channelTitle}`).join(' ');
+      const response = await fetch(`/api/youtube/search?q=${encodeURIComponent(vibeQuery)}`);
+      const data = (await response.json()) as { items?: YoutubeSearchResult[] };
+      const recommendation = data.items?.find((track) => track.id.videoId && !queue.some((queuedTrack) => queuedTrack.videoId === track.id.videoId));
+      if (!recommendation?.id.videoId) {
+        setIsPlaying(false);
+        return;
+      }
+
+      const nextVibeTrack: NowPlayingTrack = {
+        videoId: recommendation.id.videoId,
+        title: recommendation.snippet.title,
+        channelTitle: recommendation.snippet.channelTitle,
+        thumbnail: recommendation.snippet.thumbnails.medium?.url || recommendation.snippet.thumbnails.default?.url,
+      };
+      const nextQueue = [...queue, nextVibeTrack];
+      window.localStorage.setItem('bh_play_queue', JSON.stringify(nextQueue));
+      window.localStorage.setItem('bh_now_playing', JSON.stringify(nextVibeTrack));
+      setNowPlaying(nextVibeTrack);
+      setIsPlaying(true);
+    } catch {
+      setIsPlaying(false);
+    } finally {
+      isFindingVibeTrack.current = false;
+    }
+  };
+
+  const handleCustomIconUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Choose an image file for your icon.');
+      return;
+    }
+
+    if (file.size > 1024 * 1024) {
+      alert('Choose an image smaller than 1 MB.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const imageData = reader.result as string;
+      try {
+        window.localStorage.setItem('bh_customIcon', JSON.stringify(imageData));
+        setCustomIcon(imageData);
+      } catch {
+        alert('Your browser could not save this image. Try a smaller file.');
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleAppleMusicAuth = async () => {
@@ -488,7 +724,7 @@ export default function BeatHiveApp() {
               </button>
             </header>
 
-            <button 
+            <button
               onClick={() => setDjPreviewingGuest(true)}
               className="w-full bg-[#1a1a1a] hover:bg-[#222] border border-yellow-500/30 text-yellow-500 py-3 rounded-xl flex items-center justify-center gap-2 font-bold transition-colors shadow-lg"
             >
@@ -640,6 +876,16 @@ export default function BeatHiveApp() {
     );
   }
 
+  const hasNextQueuedTrack = (() => {
+    try {
+      const queue = JSON.parse(window.localStorage.getItem('bh_play_queue') || '[]') as NowPlayingTrack[];
+      const currentIndex = queue.findIndex((track) => track.videoId === nowPlaying?.videoId);
+      return currentIndex >= 0 && currentIndex < queue.length - 1;
+    } catch {
+      return false;
+    }
+  })();
+
   // State 3: Main App Interface
   return (
     <main className="min-h-[100dvh] flex flex-col font-sans overflow-hidden pt-4 pb-20 bg-[#111]">
@@ -648,12 +894,21 @@ export default function BeatHiveApp() {
         {/* Header Area with Top Navigation */}
         <div className="relative w-full flex items-center justify-center mb-4 mt-2">
           {/* Top Left Settings Button */}
-          <button 
-            onClick={() => setShowSettings(true)}
-            className="absolute left-0 z-50 w-12 h-12 bg-gradient-to-br from-yellow-400 to-yellow-500 hover:from-yellow-300 hover:to-yellow-400 transition-all duration-300 flex items-center justify-center shape-octagon shadow-lg shadow-yellow-500/30 active:scale-95"
-          >
-            <User size={20} className="text-black" />
-          </button>
+          {!showSettings && (
+            <button
+              onClick={() => setShowSettings(true)}
+              className="absolute z-50 w-14 h-14 bg-gradient-to-br from-yellow-400 to-yellow-500 hover:from-yellow-300 hover:to-yellow-400 transition-all duration-300 flex items-center justify-center shape-octagon shadow-lg shadow-yellow-500/30 active:scale-95"
+              aria-label="Open profile settings"
+              style={{ left: '2rem' }}
+            >
+              {customIcon ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={customIcon} alt="Your custom icon" className="absolute inset-0 h-full w-full object-cover shape-octagon" />
+              ) : (
+                <User size={20} className="text-black" />
+              )}
+            </button>
+          )}
 
           {/* Centered Brand Header */}
           <header className="text-center">
@@ -671,8 +926,8 @@ export default function BeatHiveApp() {
             <div className="w-10 h-10 bg-[#222] rounded-lg shadow-lg relative overflow-hidden shrink-0 border border-white/10">
               {/* Using a standard img tag for simplicity in this pure client component or we could also use Next/Image */}
               <img 
-                src="/images/asake-happiness.jpg" 
-                alt="Happiness Cover Art" 
+                src={nowPlaying?.thumbnail || "/images/asake-happiness.jpg"}
+                alt={`${nowPlaying?.title || "Happiness"} cover art`}
                 className="w-full h-full object-cover" 
               />
             </div>
@@ -681,42 +936,77 @@ export default function BeatHiveApp() {
                 <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></span>
                 Now Playing
               </p>
-              <h2 className="font-bold text-sm leading-tight text-white truncate">Happiness</h2>
-              <p className="text-[10px] text-yellow-500 font-semibold truncate mt-0.5">Asake & Gunna</p>
+              <h2 className="font-bold text-sm leading-tight text-white truncate">{nowPlaying?.title || "Happiness"}</h2>
+              <p className="text-[10px] text-yellow-500 font-semibold truncate mt-0.5">{nowPlaying?.channelTitle || "Asake & Gunna"}</p>
             </div>
-            <motion.button 
+            <motion.button
               whileTap={{ scale: 0.9 }}
-              className="w-8 h-8 rounded-full bg-[#222] flex items-center justify-center text-gray-400 hover:text-white transition-colors shrink-0"
+              onClick={() => setIsPlaying(!isPlaying)}
+              disabled={!nowPlaying?.videoId}
+              title={nowPlaying?.videoId ? (isPlaying ? 'Pause track' : 'Play track') : 'Add a queued song to play it'}
+              aria-label={nowPlaying?.videoId ? (isPlaying ? 'Pause track' : 'Play track') : 'Add a queued song to play it'}
+              className="w-8 h-8 rounded-full bg-yellow-500 flex items-center justify-center text-black hover:bg-yellow-400 transition-colors shrink-0 disabled:bg-[#222] disabled:text-gray-600 disabled:cursor-not-allowed"
             >
-              <Heart size={14} />
+              {isPlaying ? <Pause size={14} fill="currentColor" /> : <Play size={14} fill="currentColor" />}
+            </motion.button>
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={handleNextTrack}
+              disabled={!hasNextQueuedTrack}
+              title="Play next queued song"
+              aria-label="Play next queued song"
+              className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-gray-200 hover:bg-yellow-500 hover:text-black transition-colors shrink-0 disabled:bg-[#222] disabled:text-gray-600 disabled:cursor-not-allowed"
+            >
+              <SkipForward size={14} fill="currentColor" />
             </motion.button>
           </div>
         </div>
 
+        {nowPlaying?.videoId && (
+          <div className="fixed -left-[9999px] h-[180px] w-[320px] overflow-hidden" aria-hidden="true">
+            <ReactPlayer
+              src={`https://www.youtube.com/watch?v=${nowPlaying.videoId}`}
+              playing={isPlaying}
+              controls={false}
+              playsInline
+              width="100%"
+              height="100%"
+              onPlay={() => { setIsPlaying(true); recordPlayedTrack(); }}
+              onPause={() => setIsPlaying(false)}
+              onEnded={handleTrackEnded}
+            />
+          </div>
+        )}
+
         {/* View Toggle */}
-        <div className="flex bg-[#1a1a1a] rounded-xl p-1 mb-4 border border-white/5 shrink-0 mx-auto w-48 relative overflow-hidden">
-          <motion.div 
-            layout
-            className="absolute top-1 bottom-1 w-[calc(50%-4px)] bg-[#2a2a2a] rounded-lg shadow-md border border-white/5 z-0"
-            initial={false}
-            animate={{ 
-              x: viewMode === 'globe' ? 0 : '100%',
-              left: '4px'
-            }}
-            transition={{ type: "spring", stiffness: 300, damping: 30 }}
-          />
-          <button 
-            onClick={() => setViewMode('globe')}
-            className={`flex-1 flex items-center justify-center gap-2 py-2 relative z-10 text-sm font-semibold transition-colors ${viewMode === 'globe' ? 'text-yellow-500' : 'text-gray-500 hover:text-gray-300'}`}
-          >
-            <Globe size={16} /> Globe
-          </button>
-          <button 
-            onClick={() => setViewMode('list')}
-            className={`flex-1 flex items-center justify-center gap-2 py-2 relative z-10 text-sm font-semibold transition-colors ${viewMode === 'list' ? 'text-yellow-500' : 'text-gray-500 hover:text-gray-300'}`}
-          >
-            <List size={16} /> List
-          </button>
+        <div className="flex items-center gap-2 mb-4 shrink-0 mx-auto">
+          <div className="flex bg-[#1a1a1a] rounded-xl p-1 border border-white/5 w-48 relative overflow-hidden">
+            <motion.div
+              layout
+              className="absolute top-1 bottom-1 w-[calc(50%-4px)] bg-[#2a2a2a] rounded-lg shadow-md border border-white/5 z-0"
+              initial={false}
+              animate={{
+                x: viewMode === 'globe' ? 0 : '100%',
+                left: '4px'
+              }}
+              transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            />
+            <button
+              onClick={() => setViewMode('globe')}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 relative z-10 text-sm font-semibold transition-colors ${viewMode === 'globe' ? 'text-yellow-500' : 'text-gray-500 hover:text-gray-300'}`}
+            >
+              <Globe size={16} /> Globe
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 relative z-10 text-sm font-semibold transition-colors ${viewMode === 'list' ? 'text-yellow-500' : 'text-gray-500 hover:text-gray-300'}`}
+            >
+              <List size={16} /> List
+            </button>
+          </div>
+          <NextLink href="/youtube" title="View your queue" aria-label="View your queue" className="flex h-12 w-12 items-center justify-center rounded-xl border border-yellow-500/30 bg-yellow-500/10 text-yellow-500 transition-colors hover:bg-yellow-500 hover:text-black">
+            <ListMusic size={20} />
+          </NextLink>
         </div>
 
         {userRole === 'dj' && djPreviewingGuest && (
@@ -733,9 +1023,9 @@ export default function BeatHiveApp() {
 
         {/* Conditional View Rendering */}
         {viewMode === 'globe' ? (
-          <SphereCarousel userRole={userRole} />
+          <SphereCarousel userRole={userRole} energyPreference={energyPreference} onEnergyChange={setEnergyPreference} />
         ) : (
-          <ActionList userRole={userRole} />
+          <ActionList userRole={userRole} energyPreference={energyPreference} onEnergyChange={setEnergyPreference} />
         )}
 
       </div>
@@ -747,14 +1037,15 @@ export default function BeatHiveApp() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-4 pb-0 sm:pb-4"
+            className="fixed inset-0 isolate flex items-end sm:items-center justify-center bg-[#111] p-4 pb-0 sm:pb-4"
+            style={{ zIndex: 9999 }}
           >
             <motion.div 
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
               transition={{ type: "spring", damping: 25, stiffness: 300 }}
-              className="w-full max-w-md bg-[#1a1a1a] border-t border-x sm:border border-white/10 rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl relative"
+              className="w-full max-w-md max-h-[calc(100dvh-1rem)] overflow-y-auto bg-[#1a1a1a] border-t border-x sm:border border-white/10 rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl relative"
             >
               <div className="w-12 h-1 bg-white/20 rounded-full mx-auto mb-6 sm:hidden" />
               
@@ -769,16 +1060,71 @@ export default function BeatHiveApp() {
 
               <div className="space-y-6">
                 <div>
-                  <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-3">Music Source</h3>
-                  <div className="grid grid-cols-1 gap-3">
+                  <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-3">Your Icon</h3>
+                  <div className="flex flex-col gap-3 bg-[#111] p-4 rounded-xl border border-white/10 md:flex-row md:items-center">
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                      <div className="w-12 h-14 shrink-0 relative flex items-center justify-center">
+                        <div className="absolute inset-0 bg-gradient-to-br from-yellow-400 to-yellow-500 shape-octagon" />
+                        {customIcon ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={customIcon} alt="Your custom icon preview" className="absolute inset-0 h-full w-full object-cover shape-octagon" />
+                        ) : (
+                          <User size={20} className="relative z-10 text-black" />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-white">Profile icon</p>
+                        <p className="text-xs text-gray-500 mt-0.5">JPG, PNG, or GIF up to 1 MB</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <input ref={customIconInputRef} type="file" accept="image/*" className="hidden" onChange={handleCustomIconUpload} />
+                      <button onClick={() => customIconInputRef.current?.click()} className="shrink-0 rounded-lg bg-yellow-500 px-3 py-2 text-sm font-bold text-black hover:bg-yellow-400">
+                        Upload
+                      </button>
+                      {customIcon && (
+                        <button onClick={() => setCustomIcon(null)} className="shrink-0 text-sm font-bold text-gray-400 hover:text-white" aria-label="Remove custom icon">
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  {session && (
+                    <button
+                      onClick={() => {
+                        try { localStorage.removeItem('bh_isAuthenticated'); } catch {}
+                        signOut({ callbackUrl: '/' });
+                      }}
+                      className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-yellow-500/30 bg-[#111] px-4 py-3 text-sm font-bold text-yellow-500 transition-colors hover:bg-yellow-500 hover:text-black"
+                    >
+                      <LogOut size={17} /> Sign out
+                    </button>
+                  )}
+                </div>
+                <div>
+                  <button onClick={() => setShowMusicSources(!showMusicSources)} className="w-full flex items-center justify-between rounded-xl bg-[#111] p-4 text-left border border-white/10 text-white hover:border-yellow-500/50 transition-colors">
+                    <div>
+                      <h3 className="text-sm font-bold uppercase tracking-widest">Music Source</h3>
+                      <p className="text-xs text-gray-500 mt-1">{musicSource ? `${musicSource[0].toUpperCase()}${musicSource.slice(1)} connected` : 'Choose a streaming service'}</p>
+                    </div>
+                    <ChevronDown size={20} className={`text-yellow-500 transition-transform ${showMusicSources ? 'rotate-180' : ''}`} />
+                  </button>
+                  <AnimatePresence initial={false}>
+                    {showMusicSources && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className="grid grid-cols-1 gap-3 overflow-hidden pt-3"
+                      >
                                         <button 
                                           onClick={async () => {
                                             if (musicSource !== 'youtube') {
                                               // Prompt Google login for YouTube
-                                              await signIn('google', { callbackUrl: '/' });
+                                              await signIn('google', { callbackUrl: '/youtube' });
                                               setMusicSource('youtube');
                                             } else {
-                                              setMusicSource(null);
+                                              window.location.href = '/youtube';
                                             }
                                           }}
                                           className={`
@@ -878,7 +1224,9 @@ export default function BeatHiveApp() {
                         {session ? 'Sign out' : 'Sign in'}
                       </span>
                     </button>
-                  </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
 
                 <div className="pt-4 border-t border-white/5">
@@ -897,7 +1245,22 @@ export default function BeatHiveApp() {
   );
 }
 
-function ActionList({ userRole }: { userRole: string }) {
+function EnergyControls({ energyPreference, onEnergyChange }: { energyPreference: 'up' | 'down' | null; onEnergyChange: React.Dispatch<React.SetStateAction<'up' | 'down' | null>> }) {
+  const selectEnergy = (preference: 'up' | 'down') => onEnergyChange((currentPreference) => currentPreference === preference ? null : preference);
+
+  return (
+    <div className="flex gap-2 pt-1">
+      <button type="button" onClick={(event) => { event.stopPropagation(); selectEnergy('up'); }} aria-pressed={energyPreference === 'up'} className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-3 text-sm font-bold transition-colors ${energyPreference === 'up' ? 'bg-yellow-500 text-black' : 'bg-white/5 text-gray-200 hover:bg-yellow-500 hover:text-black'}`}>
+        <Flame size={18} /> Raise energy
+      </button>
+      <button type="button" onClick={(event) => { event.stopPropagation(); selectEnergy('down'); }} aria-pressed={energyPreference === 'down'} className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-3 text-sm font-bold transition-colors ${energyPreference === 'down' ? 'bg-sky-400 text-black' : 'bg-white/5 text-gray-200 hover:bg-sky-400 hover:text-black'}`}>
+        <Volume1 size={18} /> Ease it down
+      </button>
+    </div>
+  );
+}
+
+function ActionList({ userRole, energyPreference, onEnergyChange }: { userRole: string; energyPreference: 'up' | 'down' | null; onEnergyChange: React.Dispatch<React.SetStateAction<'up' | 'down' | null>> }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   return (
@@ -912,7 +1275,8 @@ function ActionList({ userRole }: { userRole: string }) {
           onClick={() => setExpandedId(expandedId === item.id ? null : item.id)}
         >
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 shrink-0 bg-[#222] group-hover:bg-gradient-to-br group-hover:from-yellow-400 group-hover:to-amber-600 rounded-xl flex items-center justify-center text-gray-400 group-hover:text-black transition-all shadow-md shape-octagon relative">
+            <div className="w-14 h-14 shrink-0 flex items-center justify-center text-gray-400 group-hover:text-black transition-all relative">
+              <div className="shape-octagon bg-[#222] group-hover:bg-gradient-to-br group-hover:from-yellow-400 group-hover:to-amber-600 shadow-md" />
               <div className="shape-octagon-inner bg-[#161616] group-hover:bg-transparent transition-colors z-0"></div>
               <div className="relative z-10 scale-[0.6]">{item.icon}</div>
             </div>
@@ -923,6 +1287,40 @@ function ActionList({ userRole }: { userRole: string }) {
           </div>
           
           <AnimatePresence>
+            {item.id === 'request' && expandedId === 'request' && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden"
+              >
+                <NextLink href="/youtube" onClick={(event) => event.stopPropagation()} className="mt-1 flex w-full items-center justify-center gap-2 rounded-lg bg-yellow-500 px-4 py-3 font-bold text-black hover:bg-yellow-400">
+                  <Search size={18} /> Find a track
+                </NextLink>
+              </motion.div>
+            )}
+            {item.id === 'queue' && expandedId === 'queue' && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden"
+              >
+                <NextLink href="/youtube" onClick={(event) => event.stopPropagation()} className="mt-1 flex w-full items-center justify-center gap-2 rounded-lg bg-yellow-500 px-4 py-3 font-bold text-black hover:bg-yellow-400">
+                  <ListMusic size={18} /> View your queue
+                </NextLink>
+              </motion.div>
+            )}
+            {item.id === 'energy' && expandedId === 'energy' && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden"
+              >
+                <EnergyControls energyPreference={energyPreference} onEnergyChange={onEnergyChange} />
+              </motion.div>
+            )}
             {item.id === 'vibes' && expandedId === 'vibes' && (
               <motion.div 
                 initial={{ opacity: 0, height: 0 }}
@@ -955,7 +1353,7 @@ function ActionList({ userRole }: { userRole: string }) {
   );
 }
 
-function SphereCarousel({ userRole }: { userRole: string }) {
+function SphereCarousel({ userRole, energyPreference, onEnergyChange }: { userRole: string; energyPreference: 'up' | 'down' | null; onEnergyChange: React.Dispatch<React.SetStateAction<'up' | 'down' | null>> }) {
   const rotX = useMotionValue(initTargetX);
   const rotY = useMotionValue(initTargetY);
   
@@ -1218,6 +1616,7 @@ function SphereCarousel({ userRole }: { userRole: string }) {
           />
         ))}
       </div>
+      <p className="text-[10px] text-[#555] font-bold tracking-widest uppercase">Drag freely • Tap to Snap</p>
 
       {/* Dynamic Selected Action Details */}
       <div className="text-center min-h-[80px] relative z-0 mt-4 pb-12 w-full px-4">
@@ -1254,7 +1653,21 @@ function SphereCarousel({ userRole }: { userRole: string }) {
                 </motion.div>
               )}
 
-              <p className="text-[10px] text-[#555] font-bold tracking-widest uppercase">Drag freely • Tap to Snap</p>
+              {activeId.startsWith('energy') && (
+                <EnergyControls energyPreference={energyPreference} onEnergyChange={onEnergyChange} />
+              )}
+
+              {activeId.startsWith('request') && (
+                <NextLink href="/youtube" className="mx-auto flex w-fit items-center justify-center gap-2 rounded-lg bg-yellow-500 px-4 py-3 text-sm font-bold text-black hover:bg-yellow-400">
+                  <Search size={18} /> Find a track
+                </NextLink>
+              )}
+
+              {activeId.startsWith('queue') && (
+                <NextLink href="/youtube" className="mx-auto flex w-fit items-center justify-center gap-2 rounded-lg bg-yellow-500 px-4 py-3 text-sm font-bold text-black hover:bg-yellow-400">
+                  <ListMusic size={18} /> View your queue
+                </NextLink>
+              )}
             </motion.div>
         </AnimatePresence>
       </div>

@@ -1,8 +1,9 @@
 import NextAuth from "next-auth";
+import type { NextAuthOptions } from "next-auth";
 import SpotifyProvider from "next-auth/providers/spotify";
 import GoogleProvider from "next-auth/providers/google";
 
-const authOptions = {
+export const authOptions: NextAuthOptions = {
   providers: [
     SpotifyProvider({
       clientId: process.env.SPOTIFY_CLIENT_ID || "",
@@ -12,7 +13,12 @@ const authOptions = {
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID || "",
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
-      authorization: "https://accounts.google.com/o/oauth2/auth?scope=https://www.googleapis.com/auth/youtube.readonly%20profile%20email",
+      authorization: {
+        params: {
+          scope: "https://www.googleapis.com/auth/youtube.force-ssl profile email",
+          prompt: "consent",
+        },
+      },
     }),
   ],
   callbacks: {
