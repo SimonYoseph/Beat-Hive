@@ -6,7 +6,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { ArrowLeft, ChevronDown, ChevronUp, History, ListMusic, LoaderCircle, Menu, Music2, Plus, Search, ThumbsUp, Trash2 } from "lucide-react";
 import NextLink from "next/link";
 import { signIn, useSession } from "next-auth/react";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 
 type SearchResult = {
   id: { videoId: string };
@@ -77,6 +77,8 @@ export default function YoutubePage() {
   const { data: session, status } = useSession();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [areSuggestionsDismissed, setAreSuggestionsDismissed] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [queueingId, setQueueingId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
@@ -86,6 +88,7 @@ export default function YoutubePage() {
   const [nowPlayingId, setNowPlayingId] = useState<string | null>(null);
   const [isQueueCollapsed, setIsQueueCollapsed] = useState(false);
   const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
+  const searchFormRef = useRef<HTMLFormElement>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   useEffect(() => {
@@ -120,6 +123,43 @@ export default function YoutubePage() {
     } catch {
       window.localStorage.removeItem("bh_youtube_requests");
     }
+  }, []);
+
+  useEffect(() => {
+    const trimmedQuery = query.trim();
+    if (areSuggestionsDismissed || trimmedQuery.length < 2) {
+      setSuggestions([]);
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      void fetch(`/api/youtube/search?q=${encodeURIComponent(trimmedQuery)}`)
+        .then(async (response) => (await response.json()) as { items?: SearchResult[] })
+        .then((data) => setSuggestions([...new Set((data.items || []).map((track) => track.snippet.title))].slice(0, 5)))
+        .catch(() => setSuggestions([]));
+    }, 250);
+
+    return () => window.clearTimeout(timeout);
+  }, [areSuggestionsDismissed, query]);
+
+  function handleSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== "Tab" || suggestions.length === 0) return;
+    event.preventDefault();
+    setQuery(suggestions[0]);
+    setSuggestions([]);
+    setAreSuggestionsDismissed(true);
+  }
+
+  useEffect(() => {
+    function dismissSuggestions(event: PointerEvent) {
+      if (!searchFormRef.current?.contains(event.target as Node)) {
+        setSuggestions([]);
+        setAreSuggestionsDismissed(true);
+      }
+    }
+
+    window.addEventListener("pointerdown", dismissSuggestions);
+    return () => window.removeEventListener("pointerdown", dismissSuggestions);
   }, []);
 
   useEffect(() => {
@@ -226,14 +266,13 @@ export default function YoutubePage() {
     }
   }
 
-  async function searchTracks(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!query.trim()) return;
+  async function searchForTracks(searchQuery: string) {
+    if (!searchQuery.trim()) return;
 
     setIsSearching(true);
     setMessage("");
     try {
-      const response = await fetch(`/api/youtube/search?q=${encodeURIComponent(query.trim())}`);
+      const response = await fetch(`/api/youtube/search?q=${encodeURIComponent(searchQuery.trim())}`);
       const data = (await response.json()) as { items?: SearchResult[]; error?: string };
       if (!response.ok) throw new Error(data.error || "Search failed.");
       setResults(data.items || []);
@@ -244,6 +283,11 @@ export default function YoutubePage() {
     } finally {
       setIsSearching(false);
     }
+  }
+
+  function searchTracks(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void searchForTracks(query);
   }
 
   async function queueTrack(track: SearchResult) {
@@ -258,6 +302,7 @@ export default function YoutubePage() {
       return;
     }
 
+    addLocalRequest(track);
     setQueueingId(track.id.videoId);
     setMessage("");
     try {
@@ -268,10 +313,10 @@ export default function YoutubePage() {
       });
       const data = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(data.error || "Could not queue this track.");
-      addLocalRequest(track);
       setMessage(`Added “${track.snippet.title}” to your BeatHive Queue.`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not queue this track.");
+      const detail = error instanceof Error ? error.message : "Could not update your YouTube playlist.";
+      setMessage(`Added “${track.snippet.title}” to Your Queue. ${detail}`);
     } finally {
       setQueueingId(null);
     }
@@ -297,12 +342,13 @@ export default function YoutubePage() {
           </div>
         </div>
 
-        <form onSubmit={searchTracks} className="flex gap-2">
+        <form ref={searchFormRef} onSubmit={searchTracks} className="relative flex gap-2">
           <label className="sr-only" htmlFor="track-search">Search songs</label>
-          <input id="track-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Song, artist, or YouTube Music link" className="min-w-0 flex-1 rounded-lg border border-white/15 bg-[#1b1b1b] px-4 py-3 text-white outline-none placeholder:text-gray-500 focus:border-yellow-500" />
+          <input id="track-search" value={query} onChange={(event) => { setQuery(event.target.value); setAreSuggestionsDismissed(false); }} onKeyDown={handleSearchKeyDown} placeholder="Song, artist, or YouTube Music link" className="min-w-0 flex-1 rounded-lg border border-white/15 bg-[#1b1b1b] px-4 py-3 text-white outline-none placeholder:text-gray-500 focus:border-yellow-500" aria-autocomplete="list" aria-controls="track-suggestions" />
           <button type="submit" disabled={isSearching} className="flex w-12 items-center justify-center rounded-lg bg-yellow-500 text-black hover:bg-yellow-400 disabled:opacity-60" aria-label="Search tracks">
             {isSearching ? <LoaderCircle className="animate-spin" size={20} /> : <Search size={20} />}
           </button>
+          {suggestions.length > 0 && <div id="track-suggestions" className="absolute left-0 right-14 top-full z-20 mt-1 overflow-hidden rounded-lg border border-white/10 bg-[#1b1b1b] shadow-xl">{suggestions.map((suggestion) => <button key={suggestion} type="button" onClick={() => { setQuery(suggestion); setSuggestions([]); setAreSuggestionsDismissed(true); void searchForTracks(suggestion); }} className="block w-full truncate px-4 py-2 text-left text-sm text-gray-300 hover:bg-white/10 hover:text-white">{suggestion}</button>)}</div>}
         </form>
 
         {message && <p className="mt-4 text-sm text-gray-300" role="status">{message}</p>}

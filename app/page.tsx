@@ -920,10 +920,10 @@ export default function BeatHiveApp() {
         </div>
 
         {/* Currently Playing Card */}
-        <div className="bg-[#1a1a1a] rounded-2xl p-2.5 mb-4 border border-white/5 relative overflow-hidden shadow-xl drop-shadow-2xl z-10 shrink-0 w-[85%] mx-auto">
+        <div className="bg-[#1a1a1a] rounded-2xl p-4 mb-4 border border-white/5 relative overflow-hidden shadow-xl drop-shadow-2xl z-10 shrink-0 w-full mx-auto">
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-yellow-600 via-yellow-400 to-yellow-600"></div>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-[#222] rounded-lg shadow-lg relative overflow-hidden shrink-0 border border-white/10">
+            <div className="w-14 h-14 bg-[#222] rounded-lg shadow-lg relative overflow-hidden shrink-0 border border-white/10">
               {/* Using a standard img tag for simplicity in this pure client component or we could also use Next/Image */}
               <img 
                 src={nowPlaying?.thumbnail || "/images/asake-happiness.jpg"}
