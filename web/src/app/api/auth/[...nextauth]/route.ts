@@ -31,6 +31,10 @@ const authOptions = {
       return session;
     },
   },
+  pages: {
+    signIn: '/',
+    error: '/',
+  },
   secret: process.env.NEXTAUTH_SECRET || "default_development_secret_do_not_use_in_production",
 };
 

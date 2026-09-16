@@ -20,6 +20,7 @@ import {
   X,
   Mail,
   ArrowRight,
+  ArrowLeft,
   Headphones,
   Users,
   Settings2,
@@ -297,6 +298,18 @@ export default function BeatHiveApp() {
           </div>
 
           <div className="w-full space-y-4">
+            <button
+              onClick={() => signIn('google', { callbackUrl: '/' })}
+              className="w-full py-4 px-6 bg-white hover:bg-gray-100 text-[#111] font-bold text-lg rounded-xl flex items-center justify-center gap-3 transition-transform active:scale-95 shadow-lg"
+            >
+              <svg viewBox="0 0 24 24" width="24" height="24" className="shrink-0" xmlns="http://www.w3.org/2000/svg">
+                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
+                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"/>
+              </svg>
+              Continue with Google
+            </button>
 
             <div className="relative flex items-center py-2">
               <div className="flex-grow border-t border-[#333]"></div>
@@ -324,7 +337,19 @@ export default function BeatHiveApp() {
   // State 2: Select Role (DJ vs Guest)
   if (userRole === 'none') {
     return (
-      <main className="min-h-[100dvh] flex flex-col items-center justify-center p-6 text-center bg-[#111]">
+      <main className="min-h-[100dvh] flex flex-col items-center justify-center p-6 text-center bg-[#111] relative">
+        <button
+          onClick={() => {
+            setIsAuthenticated(false);
+            window.scrollTo(0, 0);
+          }}
+          className="absolute top-6 left-6 p-2 rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors flex items-center gap-2"
+          aria-label="Go back"
+        >
+          <ArrowLeft size={20} />
+          <span className="text-sm font-medium pr-1">Back</span>
+        </button>
+
         <div className="max-w-md w-full flex flex-col items-center space-y-6">
           <h2 className="text-3xl font-black tracking-tight text-white mb-2">
             Who are you today?
@@ -730,7 +755,7 @@ export default function BeatHiveApp() {
                                           onClick={async () => {
                                             if (musicSource !== 'youtube') {
                                               // Prompt Google login for YouTube
-                                              await signIn('google');
+                                              await signIn('google', { callbackUrl: '/' });
                                               setMusicSource('youtube');
                                             } else {
                                               setMusicSource(null);
@@ -762,7 +787,7 @@ export default function BeatHiveApp() {
                           signOut({ callbackUrl: '/' });
                           setMusicSource(null);
                         } else {
-                          signIn('spotify');
+                          signIn('spotify', { callbackUrl: '/' });
                           setMusicSource('spotify');
                         }
                       }}
@@ -815,7 +840,7 @@ export default function BeatHiveApp() {
                           try { localStorage.removeItem('bh_isAuthenticated'); } catch {}
                           signOut({ callbackUrl: '/' });
                         } else {
-                          signIn('google');
+                          signIn('google', { callbackUrl: '/' });
                         }
                       }}
                       className={`
@@ -911,34 +936,6 @@ function ActionList({ userRole }: { userRole: string }) {
 }
 
 function SphereCarousel({ userRole }: { userRole: string }) {
-      // Fix ReferenceError: snapToItem is not defined
-      const snapToItem = (item: any) => {
-        const targetX = Math.atan2(item.baseY, Math.sqrt(item.baseX**2 + item.baseZ**2));
-        const targetY = -Math.atan2(item.baseX, item.baseZ);
-        animate(rotX, getNearestAngle(rotX.get(), targetX), { type: 'spring', stiffness: 260, damping: 24, onUpdate: checkClosestItem });
-        animate(rotY, getNearestAngle(rotY.get(), targetY), { type: 'spring', stiffness: 260, damping: 24, onUpdate: checkClosestItem });
-      };
-    // Fix ReferenceError: snapToClosest is not defined
-    const snapToClosest = () => {
-      let maxZ = -Infinity;
-      let closestItem: any = null;
-      let cx = rotX.get();
-      let cy = rotY.get();
-
-      HIVE_ITEMS_3D.forEach(item => {
-        if (item.isBlank) return;
-        const p = rotate3D(item, cx, cy);
-        if (p.z > maxZ) {
-          maxZ = p.z;
-          closestItem = item;
-        }
-      });
-
-      if (closestItem) {
-        snapToItem(closestItem);
-      }
-    };
-  // Use framer-motion native performance values (0 React state re-renders during dragging!)
   const rotX = useMotionValue(initTargetX);
   const rotY = useMotionValue(initTargetY);
   
@@ -946,99 +943,191 @@ function SphereCarousel({ userRole }: { userRole: string }) {
 
   const isDragging = useRef(false);
   const dragDistance = useRef(0);
-  const prevTouch = useRef<{x: number, y: number} | null>(null);
+  const prevTouch = useRef<{ x: number; y: number } | null>(null);
   const velocity = useRef({ x: 0, y: 0 });
-  const lastTime = useRef(Date.now());
+  const lastTime = useRef(0);
+  const lastMoveTime = useRef(0);
+  const animFrameRef = useRef<number | null>(null);
+
+  const stopInertia = () => {
+    if (animFrameRef.current !== null) {
+      cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    return () => stopInertia();
+  }, []);
 
   const checkClosestItem = () => {
     let maxZ = -Infinity;
     let closestItem: any = null;
-    let cx = rotX.get();
-    let cy = rotY.get();
+    const cx = rotX.get();
+    const cy = rotY.get();
 
     HIVE_ITEMS_3D.forEach(item => {
-       if (item.isBlank) return; 
-       
-       const p = rotate3D(item, cx, cy);
-       if (p.z > maxZ) {
-          maxZ = p.z;
-          closestItem = item;
-       }
+      if (item.isBlank) return; 
+      const p = rotate3D(item, cx, cy);
+      if (p.z > maxZ) {
+        maxZ = p.z;
+        closestItem = item;
+      }
     });
 
     if (closestItem) {
-       setActiveId((prev) => prev !== closestItem.id ? closestItem.id : prev);
+      setActiveId((prev) => (prev !== closestItem.id ? closestItem.id : prev));
+    }
+  };
+
+  const snapToItem = (item: any) => {
+    stopInertia();
+    rotX.stop();
+    rotY.stop();
+    const targetX = Math.atan2(item.baseY, Math.sqrt(item.baseX ** 2 + item.baseZ ** 2));
+    const targetY = -Math.atan2(item.baseX, item.baseZ);
+    animate(rotX, getNearestAngle(rotX.get(), targetX), { type: 'spring', stiffness: 220, damping: 26, onUpdate: checkClosestItem });
+    animate(rotY, getNearestAngle(rotY.get(), targetY), { type: 'spring', stiffness: 220, damping: 26, onUpdate: checkClosestItem });
+  };
+
+  const snapToClosest = () => {
+    let maxZ = -Infinity;
+    let closestItem: any = null;
+    const cx = rotX.get();
+    const cy = rotY.get();
+
+    HIVE_ITEMS_3D.forEach(item => {
+      if (item.isBlank) return;
+      const p = rotate3D(item, cx, cy);
+      if (p.z > maxZ) {
+        maxZ = p.z;
+        closestItem = item;
+      }
+    });
+
+    if (closestItem) {
+      snapToItem(closestItem);
     }
   };
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    stopInertia();
+    rotX.stop();
+    rotY.stop();
     isDragging.current = true;
     dragDistance.current = 0;
     prevTouch.current = { x: e.clientX, y: e.clientY };
-    lastTime.current = Date.now();
+    lastTime.current = performance.now();
+    lastMoveTime.current = performance.now();
     velocity.current = { x: 0, y: 0 };
-    rotX.stop();
-    rotY.stop();
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {}
   };
 
-  const handlePointerMove = () => {
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!isDragging.current || !prevTouch.current) return;
     
-    // Removed unused dx, dy variables
-     // Removed unused dx, dy, zIndex and invalid useTransform hook usage
-  };
-
-  const handlePointerUp = () => {
-    isDragging.current = false;
-    prevTouch.current = null;
+    const now = performance.now();
+    const dt = Math.max(1, now - lastTime.current);
+    const dx = e.clientX - prevTouch.current.x;
+    const dy = e.clientY - prevTouch.current.y;
     
-    let isYDone = false;
-    let isXDone = false;
-    const checkAndSnap = () => {
-      if (isYDone && isXDone) {
-        snapToClosest();
-      }
+    dragDistance.current += Math.hypot(dx, dy);
+
+    // Natural 1:1 spherical arc rotation (Apple Maps / Google Maps feel)
+    const SENSITIVITY = 1 / 185;
+    const dRotY = dx * SENSITIVITY;
+    const dRotX = -dy * SENSITIVITY;
+
+    const VERTICAL_LIMIT = Math.PI / 2.2;
+    const newRotX = Math.max(-VERTICAL_LIMIT, Math.min(VERTICAL_LIMIT, rotX.get() + dRotX));
+    const newRotY = rotY.get() + dRotY;
+
+    rotX.set(newRotX);
+    rotY.set(newRotY);
+
+    // Filtered velocity calculation (rad / ms)
+    const instVelX = dRotY / dt;
+    const instVelY = dRotX / dt;
+    velocity.current = {
+      x: velocity.current.x * 0.3 + instVelX * 0.7,
+      y: velocity.current.y * 0.3 + instVelY * 0.7
     };
 
-    // Calculate natural deceleration targeted locations based on velocity
-    if (Math.abs(velocity.current.x) > 0.05 || Math.abs(velocity.current.y) > 0.05) {
-      
-      // Horizontal Momentum
-      animate(rotY, rotY.get() + velocity.current.x * 6, { 
-        type: "spring", 
-        stiffness: 40,
-        damping: 12,
-        mass: 1.2,
-        onUpdate: checkClosestItem,
-        onComplete: () => { isYDone = true; checkAndSnap(); }
-      });
-      
-      // Vertical Momentum with hard limit boundary bounces
-      const targetX = rotX.get() - velocity.current.y * 6;
-      const VERTICAL_LIMIT = Math.PI / 2.2;
-      let finalTargetX = targetX;
-      
-      // Make the momentum bounce off the poles if you throw it too hard up or down
-      if (targetX > VERTICAL_LIMIT) finalTargetX = VERTICAL_LIMIT;
-      if (targetX < -VERTICAL_LIMIT) finalTargetX = -VERTICAL_LIMIT;
+    prevTouch.current = { x: e.clientX, y: e.clientY };
+    lastTime.current = now;
+    lastMoveTime.current = now;
 
-      animate(rotX, finalTargetX, { 
-        type: "spring", 
-        stiffness: 40,
-        damping: 12,
-        mass: 1.2,
-        onUpdate: checkClosestItem,
-        onComplete: () => { isXDone = true; checkAndSnap(); }
-      });
+    checkClosestItem();
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDragging.current) return;
+    isDragging.current = false;
+    prevTouch.current = null;
+
+    try {
+      if (e.currentTarget.hasPointerCapture?.(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      }
+    } catch {}
+
+    const now = performance.now();
+    // If the pointer paused before release, remove momentum
+    if (now - lastMoveTime.current > 75) {
+      velocity.current = { x: 0, y: 0 };
+    }
+
+    const speed = Math.hypot(velocity.current.x, velocity.current.y);
+
+    if (speed > 0.0003) {
+      // Fluid inertial glide with friction decay (Google Maps / Apple Maps momentum physics)
+      let lastFrame = performance.now();
+      const FRICTION = 0.94;
+      const VERTICAL_LIMIT = Math.PI / 2.2;
+
+      const tick = (frameTime: number) => {
+        const dt = Math.min(32, Math.max(1, frameTime - lastFrame));
+        lastFrame = frameTime;
+
+        const decay = Math.pow(FRICTION, dt / 16.67);
+        velocity.current.x *= decay;
+        velocity.current.y *= decay;
+
+        const nextY = rotY.get() + velocity.current.x * dt;
+        let nextX = rotX.get() + velocity.current.y * dt;
+
+        if (nextX > VERTICAL_LIMIT) {
+          nextX = VERTICAL_LIMIT;
+          velocity.current.y = -velocity.current.y * 0.3; // Soft cushion bounce
+        } else if (nextX < -VERTICAL_LIMIT) {
+          nextX = -VERTICAL_LIMIT;
+          velocity.current.y = -velocity.current.y * 0.3;
+        }
+
+        rotY.set(nextY);
+        rotX.set(nextX);
+        checkClosestItem();
+
+        const curSpeed = Math.hypot(velocity.current.x, velocity.current.y);
+        if (curSpeed > 0.00008) {
+          animFrameRef.current = requestAnimationFrame(tick);
+        } else {
+          snapToClosest();
+        }
+      };
+
+      stopInertia();
+      animFrameRef.current = requestAnimationFrame(tick);
     } else {
       snapToClosest();
     }
   };
 
   const handleClickItem = (item: any) => {
-    if (dragDistance.current < 20) {
-       // If cleanly tapped (not swiped over), auto-rotate that item to the front!
-       snapToItem(item);
+    if (dragDistance.current < 12) {
+      snapToItem(item);
     }
   };
 
@@ -1048,7 +1137,7 @@ function SphereCarousel({ userRole }: { userRole: string }) {
     <div className="relative w-full max-w-[420px] mx-auto flex flex-col items-center justify-start flex-1 -mt-2">
       {/* Universal Drag Container allowing all axes */}
       <div 
-        className="relative w-full h-[380px] flex items-center justify-center cursor-grab active:cursor-grabbing shrink-0"
+        className="relative w-full h-[380px] flex items-center justify-center cursor-grab active:cursor-grabbing shrink-0 select-none"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
@@ -1123,28 +1212,25 @@ function SphereItem({ item, rotX, rotY, isActive, onClick }: any) {
   const z = useTransform(() => rotate3D(item, rotX.get(), rotY.get()).z);
 
   const scale = useTransform(() => {
-     return isActive ? 1.15 : 1.0; 
+     const currentZ = z.get();
+     const perspectiveScale = 0.72 + 0.28 * ((currentZ + RADIUS) / (2 * RADIUS));
+     return (isActive ? 1.15 : 1.0) * perspectiveScale; 
   });
   
   const opacity = useTransform(() => {
-     // Aggressive fade mask to hide the edges and only show the front-most cluster
      const currentZ = z.get();
-     // If it's physically turning away past a tight radius, immediately cut it
-     if (currentZ < 80) return 0;
-     // Softly fade in only the icons closely surrounding the front face
-     if (currentZ < 150) return ((currentZ - 80) / 70); 
+     if (currentZ < 10) return 0;
+     if (currentZ < 90) return (currentZ - 10) / 80; 
      return 1;
   });
   
-    const zIndex = useTransform(() => {
+  const zIndex = useTransform(() => {
      const currentZ = z.get();
-     // Layer objects strictly by their actual Z depth so they never bleed through each other
      return Math.round(currentZ + RADIUS) + (isActive ? 1000 : 0);
-    });
+  });
 
-  // Calculate true spherical projection rotations so the flat shapes perfectly physically curve
-  // along the surface body of the bounding sphere wrapper.
-  const rotateY = useTransform(() => { const p = rotate3D(item, rotX.get(), rotY.get()); return Math.atan2(p.x, p.z) * (180 / Math.PI); }); const rotateX = useTransform(() => { const p = rotate3D(item, rotX.get(), rotY.get()); const distXZ = Math.sqrt(p.x*p.x + p.z*p.z); return -Math.atan2(p.y, distXZ) * (180 / Math.PI); });
+  const rotateY = useTransform(() => { const p = rotate3D(item, rotX.get(), rotY.get()); return Math.atan2(p.x, p.z) * (180 / Math.PI); }); 
+  const rotateX = useTransform(() => { const p = rotate3D(item, rotX.get(), rotY.get()); const distXZ = Math.sqrt(p.x*p.x + p.z*p.z); return -Math.atan2(p.y, distXZ) * (180 / Math.PI); });
 
   return (
     <motion.div
@@ -1153,7 +1239,7 @@ function SphereItem({ item, rotX, rotY, isActive, onClick }: any) {
         rotateX, rotateY,
         marginLeft: '-53px', marginTop: '-53px' 
       }}
-      className={`absolute left-1/2 top-1/2 ${item.isBlank ? 'pointer-events-none' : ''}`}
+      className={`absolute left-1/2 top-1/2 select-none ${item.isBlank ? 'pointer-events-none' : ''}`}
       onClick={item.isBlank ? undefined : onClick}
     >
       <HiveButton title={item.title} icon={item.icon} featured={isActive} isBlank={item.isBlank} />
