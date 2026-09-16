@@ -5,7 +5,6 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import NextLink from 'next/link';
-import ReactPlayer from "react-player";
 import { 
   Music, 
   ThumbsUp, 
@@ -38,6 +37,8 @@ import {
 } from "lucide-react";
 import { signIn, signOut, useSession } from "next-auth/react";
 import { motion, AnimatePresence, useMotionValue, animate, useTransform } from "framer-motion";
+import { usePlayback } from "./playback-provider";
+import { Tutorial } from "./tutorial";
 
 // Mock DJ Data for Genres to display tallies
 const GENRE_TALLIES = [
@@ -54,13 +55,14 @@ const GENRE_TALLIES = [
 ].sort((a, b) => b.count - a.count);
 
 const HIVE_ITEMS = [
+  { id: 'hive', title: "Hive", description: "See everyone in this party", icon: <Users size={32} /> },
   { id: 'request', title: "Request", description: "Search and request a song for the queue", icon: <Search size={36} strokeWidth={2.5} /> },
   { id: 'queue', title: "Queue", description: "View what's coming up next", icon: <ListMusic size={32} /> },
-  { id: 'energy', title: "Energy", description: "Tell the DJ to bring the heat up or down", icon: <Flame size={32} /> },
+  { id: 'energy', title: "Energy", description: "Tell the Hive Host to bring the heat up or down", icon: <Flame size={32} /> },
   { id: 'upvote', title: "Upvote", description: "Vote for currently queued tracks", icon: <ThumbsUp size={32} /> },
-  { id: 'vibes', title: "Vibes", description: "Let the DJ know you're feeling the set", icon: <Music size={32} /> },
-  { id: 'shoutout', title: "Shoutout", description: "Send a message to the DJ booth", icon: <MessageSquare size={32} /> },
-  { id: 'tip', title: "Tip DJ", description: "Show some love with a direct tip", icon: <Heart size={32} /> },
+  { id: 'vibes', title: "Vibes", description: "Let the Hive Host know you're feeling the set", icon: <Music size={32} /> },
+  { id: 'shoutout', title: "Shoutout", description: "Send a message to the Hive Host", icon: <MessageSquare size={32} /> },
+  { id: 'tip', title: "Tip Hive Host", description: "Show some love with a direct tip", icon: <Heart size={32} /> },
 ];
 
 const TOTAL_TILES = 32; // Exactly 32 panels on a standard soccer ball
@@ -100,11 +102,17 @@ LAT_LON_SLOTS.sort((a, b) => {
   return distA - distB;
 });
 
-const ALL_ITEMS = Array.from({ length: TOTAL_TILES }).map((_, i) => {
-  // Take the 7 actual icons and repeat them over and over to wrap entirely around the whole ball
-  const realItemIndex = i % HIVE_ITEMS.length;
-  // Give every single copy a uniquely identifiable ID so React keys don't break
-  return { ...HIVE_ITEMS[realItemIndex], id: `${HIVE_ITEMS[realItemIndex].id}-${i}`, isBlank: false };
+const assignedActionIds: string[] = [];
+const ALL_ITEMS = LAT_LON_SLOTS.slice(0, TOTAL_TILES).map((slot, index) => {
+  const neighboringActions = new Set(
+    LAT_LON_SLOTS.slice(0, index).flatMap((neighbor, neighborIndex) =>
+      Math.hypot(slot.x - neighbor.x, slot.y - neighbor.y, slot.z - neighbor.z) < 135 ? [assignedActionIds[neighborIndex]] : []
+    )
+  );
+  const availableActions = HIVE_ITEMS.filter((item) => !neighboringActions.has(item.id));
+  const action = availableActions[index % availableActions.length] || HIVE_ITEMS[index % HIVE_ITEMS.length];
+  assignedActionIds.push(action.id);
+  return { ...action, id: `${action.id}-${index}`, isBlank: false };
 });
 
 const HIVE_ITEMS_3D = ALL_ITEMS.map((item, i) => {
@@ -223,49 +231,25 @@ type SyncedSettings = {
   isAnonymousDJ?: boolean;
   customIcon?: string | null;
   energyPreference?: 'up' | 'down' | null;
+  selectedVibe?: string | null;
+  lastShoutout?: string | null;
+  tipTotal?: number;
 };
 
 // Main Entry Component
 export default function BeatHiveApp() {
   const { data: session } = useSession();
+  const { nowPlaying, isPlaying, setNowPlaying, setIsPlaying } = usePlayback();
   const userEmail = session?.user?.email;
     // YouTube search state
       // Removed unused YouTube search state variables
   const [isClient, setIsClient] = useState(false);
-  const [nowPlaying, setNowPlaying] = useState<NowPlayingTrack | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
   const isFindingVibeTrack = useRef(false);
 
   // Always force scroll to top on exact mounting of the main component
   useEffect(() => {
     setIsClient(true);
     window.scrollTo(0, 0);
-  }, []);
-
-  useEffect(() => {
-    function loadNowPlaying() {
-      try {
-        const savedTrack = window.localStorage.getItem('bh_now_playing');
-        if (savedTrack) {
-          setNowPlaying(JSON.parse(savedTrack));
-          if (window.localStorage.getItem('bh_queue_autoplay') === 'true') {
-            window.localStorage.removeItem('bh_queue_autoplay');
-            setIsPlaying(true);
-          }
-          return;
-        }
-
-        const savedQueue = window.localStorage.getItem('bh_play_queue');
-        const firstTrack = savedQueue ? JSON.parse(savedQueue)[0] : null;
-        if (firstTrack && typeof firstTrack !== 'string') setNowPlaying(firstTrack);
-      } catch {
-        setNowPlaying(null);
-      }
-    }
-
-    loadNowPlaying();
-    window.addEventListener('storage', loadNowPlaying);
-    return () => window.removeEventListener('storage', loadNowPlaying);
   }, []);
 
   const [isAuthenticated, setIsAuthenticated] = usePersistedState('bh_isAuthenticated', false);
@@ -289,14 +273,24 @@ export default function BeatHiveApp() {
 
   // DJ State
   const [djRoomActive, setDjRoomActive] = usePersistedState('bh_djRoomActive', false);
+  const [isPartyCreator, setIsPartyCreator] = usePersistedState('bh_isPartyCreator', false);
   const [isAnonymousDJ, setIsAnonymousDJ] = usePersistedState('bh_isAnonymousDJ', false);
   const [energyPreference, setEnergyPreference] = usePersistedState<'up' | 'down' | null>('bh_energyPreference', null);
+  const [selectedVibe, setSelectedVibe] = usePersistedState<string | null>('bh_selectedVibe', null);
+  const [lastShoutout, setLastShoutout] = usePersistedState<string | null>('bh_lastShoutout', null);
+  const [tipTotal, setTipTotal] = usePersistedState('bh_tipTotal', 0);
   const [djPreviewingGuest, setDjPreviewingGuest] = usePersistedState('bh_djPreviewingGuest', false);
   const [djQrExpanded, setDjQrExpanded] = usePersistedState('bh_djQrExpanded', false);
 
   // Guest State
   const [qrExpanded, setQrExpanded] = usePersistedState('bh_qrExpanded', false);
   const [remoteSettingsLoaded, setRemoteSettingsLoaded] = useState(false);
+
+  useEffect(() => {
+    const showTutorialActions = () => setViewMode('list');
+    window.addEventListener('bh-tutorial-guest-open', showTutorialActions);
+    return () => window.removeEventListener('bh-tutorial-guest-open', showTutorialActions);
+  }, [setViewMode]);
 
   useEffect(() => {
     let isCurrent = true;
@@ -321,6 +315,9 @@ export default function BeatHiveApp() {
         if (typeof settings.isAnonymousDJ === 'boolean') setIsAnonymousDJ(settings.isAnonymousDJ);
         if (settings.customIcon !== undefined) setCustomIcon(settings.customIcon);
         if (settings.energyPreference !== undefined) setEnergyPreference(settings.energyPreference);
+        if (settings.selectedVibe !== undefined) setSelectedVibe(settings.selectedVibe);
+        if (settings.lastShoutout !== undefined) setLastShoutout(settings.lastShoutout);
+        if (typeof settings.tipTotal === 'number') setTipTotal(settings.tipTotal);
       } catch {
         // Local storage remains available when the settings store cannot be reached.
       } finally {
@@ -340,13 +337,13 @@ export default function BeatHiveApp() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          settings: { userRole, hasAccess, viewMode, musicSource, isAnonymousDJ, customIcon, energyPreference },
+          settings: { userRole, hasAccess, viewMode, musicSource, isAnonymousDJ, customIcon, energyPreference, selectedVibe, lastShoutout, tipTotal },
         }),
       });
     }, 400);
 
     return () => window.clearTimeout(timeout);
-  }, [customIcon, energyPreference, hasAccess, isAnonymousDJ, musicSource, remoteSettingsLoaded, userEmail, userRole, viewMode]);
+  }, [customIcon, energyPreference, hasAccess, isAnonymousDJ, lastShoutout, musicSource, remoteSettingsLoaded, selectedVibe, tipTotal, userEmail, userRole, viewMode]);
 
   if (!isClient) return null; // Prevent hydration flash on first render
 
@@ -361,6 +358,7 @@ export default function BeatHiveApp() {
   };
 
   const handleStartDJRoom = () => {
+    setIsPartyCreator(true);
     setDjRoomActive(true);
     window.scrollTo(0, 0);
   };
@@ -546,7 +544,7 @@ export default function BeatHiveApp() {
               Beat<span className="text-yellow-500">Hive</span>
             </h1>
             <p className="text-gray-400 font-medium text-lg max-w-[280px] mx-auto">
-              Join the crowd. Control the music. Tip the DJ.
+              Join the crowd. Control the music. Tip the Hive Host.
             </p>
           </div>
 
@@ -620,7 +618,7 @@ export default function BeatHiveApp() {
             </div>
             <div className="text-left flex-1">
               <h3 className="text-xl font-bold text-white mb-1">Host a Room</h3>
-              <p className="text-sm text-gray-400">I am the DJ or event organizer</p>
+              <p className="text-sm text-gray-400">I am the Hive Host or event organizer</p>
             </div>
             <ArrowRight className="text-gray-600 group-hover:text-yellow-500 transition-colors" />
           </button>
@@ -661,17 +659,17 @@ export default function BeatHiveApp() {
             <div className="space-y-4 mb-8 text-left">
               <div className="space-y-2">
                 <label className="text-xs font-bold text-gray-500 uppercase tracking-wider pl-1">Room Name</label>
-                <input type="text" placeholder="e.g. Friday Night Live" className="w-full bg-[#111] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500" />
+                <input data-tutorial-target="host-room-name" type="text" placeholder="e.g. Friday Night Live" className="w-full bg-[#111] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500" />
               </div>
               
               <div className="bg-[#111] border border-white/10 rounded-xl p-4 flex items-center justify-between">
                 <div>
                   <h4 className="font-bold text-white flex items-center gap-2">
-                    <EyeOff size={16} className="text-gray-400" /> Anonymous DJ
+                    <EyeOff size={16} className="text-gray-400" /> Anonymous Hive Host
                   </h4>
                   <p className="text-xs text-gray-500 mt-1">Hide your identity from the crowd</p>
                 </div>
-                <button 
+                <button data-tutorial-target="host-anonymous-toggle"
                   onClick={() => setIsAnonymousDJ(!isAnonymousDJ)}
                   className={`w-12 h-6 rounded-full transition-colors relative flex items-center px-1 ${isAnonymousDJ ? 'bg-yellow-500' : 'bg-gray-700'}`}
                 >
@@ -685,13 +683,14 @@ export default function BeatHiveApp() {
               </div>
             </div>
 
-            <button
+            <button data-tutorial-target="host-start-party"
               onClick={handleStartDJRoom}
               className="w-full py-4 bg-yellow-500 hover:bg-yellow-400 text-black font-bold text-lg rounded-xl transition-all shadow-lg shadow-yellow-500/20"
             >
               Start Party
             </button>
           </div>
+          <Tutorial role="host" />
         </main>
       );
     }
@@ -813,7 +812,7 @@ export default function BeatHiveApp() {
               Join the Room
             </h2>
             <p className="text-gray-400 font-medium text-base leading-relaxed">
-              You are logged in! Now span the DJ&apos;s venue QR code to join the live session and take control.
+              You are logged in! Now scan the Hive Host&apos;s venue QR code to join the live session and take control.
             </p>
           </div>
 
@@ -920,14 +919,14 @@ export default function BeatHiveApp() {
         </div>
 
         {/* Currently Playing Card */}
-        <div className="bg-[#1a1a1a] rounded-2xl p-4 mb-4 border border-white/5 relative overflow-hidden shadow-xl drop-shadow-2xl z-10 shrink-0 w-full mx-auto">
+        {nowPlaying && <div className="bg-[#1a1a1a] rounded-2xl p-4 mb-4 border border-white/5 relative overflow-hidden shadow-xl drop-shadow-2xl z-10 shrink-0 w-full mx-auto">
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-yellow-600 via-yellow-400 to-yellow-600"></div>
           <div className="flex items-center gap-3">
             <div className="w-14 h-14 bg-[#222] rounded-lg shadow-lg relative overflow-hidden shrink-0 border border-white/10">
               {/* Using a standard img tag for simplicity in this pure client component or we could also use Next/Image */}
               <img 
-                src={nowPlaying?.thumbnail || "/images/asake-happiness.jpg"}
-                alt={`${nowPlaying?.title || "Happiness"} cover art`}
+                src={nowPlaying.thumbnail || "/images/asake-happiness.jpg"}
+                alt={`${nowPlaying.title} cover art`}
                 className="w-full h-full object-cover" 
               />
             </div>
@@ -936,50 +935,36 @@ export default function BeatHiveApp() {
                 <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></span>
                 Now Playing
               </p>
-              <h2 className="font-bold text-sm leading-tight text-white truncate">{nowPlaying?.title || "Happiness"}</h2>
-              <p className="text-[10px] text-yellow-500 font-semibold truncate mt-0.5">{nowPlaying?.channelTitle || "Asake & Gunna"}</p>
+              <h2 className="font-bold text-sm leading-tight text-white truncate">{nowPlaying.title}</h2>
+              <p className="text-[10px] text-yellow-500 font-semibold truncate mt-0.5">{nowPlaying.channelTitle}</p>
             </div>
-            <motion.button
-              whileTap={{ scale: 0.9 }}
-              onClick={() => setIsPlaying(!isPlaying)}
-              disabled={!nowPlaying?.videoId}
-              title={nowPlaying?.videoId ? (isPlaying ? 'Pause track' : 'Play track') : 'Add a queued song to play it'}
-              aria-label={nowPlaying?.videoId ? (isPlaying ? 'Pause track' : 'Play track') : 'Add a queued song to play it'}
-              className="w-8 h-8 rounded-full bg-yellow-500 flex items-center justify-center text-black hover:bg-yellow-400 transition-colors shrink-0 disabled:bg-[#222] disabled:text-gray-600 disabled:cursor-not-allowed"
-            >
-              {isPlaying ? <Pause size={14} fill="currentColor" /> : <Play size={14} fill="currentColor" />}
-            </motion.button>
-            <motion.button
-              whileTap={{ scale: 0.9 }}
-              onClick={handleNextTrack}
-              disabled={!hasNextQueuedTrack}
-              title="Play next queued song"
-              aria-label="Play next queued song"
-              className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-gray-200 hover:bg-yellow-500 hover:text-black transition-colors shrink-0 disabled:bg-[#222] disabled:text-gray-600 disabled:cursor-not-allowed"
-            >
-              <SkipForward size={14} fill="currentColor" />
-            </motion.button>
+            {userRole === 'dj' && <>
+              <motion.button
+                whileTap={{ scale: 0.9 }}
+                onClick={() => setIsPlaying(!isPlaying)}
+                disabled={!nowPlaying?.videoId}
+                title={nowPlaying?.videoId ? (isPlaying ? 'Pause track' : 'Play track') : 'Add a queued song to play it'}
+                aria-label={nowPlaying?.videoId ? (isPlaying ? 'Pause track' : 'Play track') : 'Add a queued song to play it'}
+                className="w-8 h-8 rounded-full bg-yellow-500 flex items-center justify-center text-black hover:bg-yellow-400 transition-colors shrink-0 disabled:bg-[#222] disabled:text-gray-600 disabled:cursor-not-allowed"
+              >
+                {isPlaying ? <Pause size={14} fill="currentColor" /> : <Play size={14} fill="currentColor" />}
+              </motion.button>
+              <motion.button
+                whileTap={{ scale: 0.9 }}
+                onClick={handleNextTrack}
+                disabled={!hasNextQueuedTrack}
+                title="Play next queued song"
+                aria-label="Play next queued song"
+                className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-gray-200 hover:bg-yellow-500 hover:text-black transition-colors shrink-0 disabled:bg-[#222] disabled:text-gray-600 disabled:cursor-not-allowed"
+              >
+                <SkipForward size={14} fill="currentColor" />
+              </motion.button>
+            </>}
           </div>
-        </div>
-
-        {nowPlaying?.videoId && (
-          <div className="fixed -left-[9999px] h-[180px] w-[320px] overflow-hidden" aria-hidden="true">
-            <ReactPlayer
-              src={`https://www.youtube.com/watch?v=${nowPlaying.videoId}`}
-              playing={isPlaying}
-              controls={false}
-              playsInline
-              width="100%"
-              height="100%"
-              onPlay={() => { setIsPlaying(true); recordPlayedTrack(); }}
-              onPause={() => setIsPlaying(false)}
-              onEnded={handleTrackEnded}
-            />
-          </div>
-        )}
+        </div>}
 
         {/* View Toggle */}
-        <div className="flex items-center gap-2 mb-4 shrink-0 mx-auto">
+        <div data-tutorial-target="guest-view-toggle" className="flex items-center gap-2 mb-4 shrink-0 mx-auto">
           <div className="flex bg-[#1a1a1a] rounded-xl p-1 border border-white/5 w-48 relative overflow-hidden">
             <motion.div
               layout
@@ -1004,7 +989,7 @@ export default function BeatHiveApp() {
               <List size={16} /> List
             </button>
           </div>
-          <NextLink href="/youtube" title="View your queue" aria-label="View your queue" className="flex h-12 w-12 items-center justify-center rounded-xl border border-yellow-500/30 bg-yellow-500/10 text-yellow-500 transition-colors hover:bg-yellow-500 hover:text-black">
+          <NextLink data-tutorial-target="guest-queue-link" href="/youtube" title="View your queue" aria-label="View your queue" className="flex h-12 w-12 items-center justify-center rounded-xl border border-yellow-500/30 bg-yellow-500/10 text-yellow-500 transition-colors hover:bg-yellow-500 hover:text-black">
             <ListMusic size={20} />
           </NextLink>
         </div>
@@ -1023,12 +1008,14 @@ export default function BeatHiveApp() {
 
         {/* Conditional View Rendering */}
         {viewMode === 'globe' ? (
-          <SphereCarousel userRole={userRole} energyPreference={energyPreference} onEnergyChange={setEnergyPreference} />
+          <SphereCarousel userRole={userRole} energyPreference={energyPreference} onEnergyChange={setEnergyPreference} selectedVibe={selectedVibe} onVibeChange={setSelectedVibe} lastShoutout={lastShoutout} onShoutout={setLastShoutout} tipTotal={tipTotal} onTip={(amount) => setTipTotal((total) => total + amount)} />
         ) : (
-          <ActionList userRole={userRole} energyPreference={energyPreference} onEnergyChange={setEnergyPreference} />
+          <ActionList userRole={userRole} energyPreference={energyPreference} onEnergyChange={setEnergyPreference} selectedVibe={selectedVibe} onVibeChange={setSelectedVibe} lastShoutout={lastShoutout} onShoutout={setLastShoutout} tipTotal={tipTotal} onTip={(amount) => setTipTotal((total) => total + amount)} />
         )}
 
       </div>
+
+      <Tutorial role="guest" />
 
       {/* Settings Modal Layer using AnimatePresence */}
       <AnimatePresence>
@@ -1101,6 +1088,17 @@ export default function BeatHiveApp() {
                     </button>
                   )}
                 </div>
+                {isPartyCreator && <div>
+                  <h3 className="mb-3 text-sm font-bold uppercase tracking-widest text-gray-400">View As</h3>
+                  <div className="grid grid-cols-2 rounded-xl border border-white/10 bg-[#111] p-1">
+                    <button onClick={() => { setUserRole('guest'); setShowSettings(false); }} className={`flex items-center justify-center gap-2 rounded-lg py-3 text-sm font-bold transition-colors ${userRole === 'guest' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-white'}`} aria-pressed={userRole === 'guest'}>
+                      <User size={17} /> Guest
+                    </button>
+                    <button onClick={() => { setUserRole('dj'); setDjRoomActive(true); setShowSettings(false); }} className={`flex items-center justify-center gap-2 rounded-lg py-3 text-sm font-bold transition-colors ${userRole === 'dj' ? 'bg-yellow-500 text-black' : 'text-gray-500 hover:text-yellow-500'}`} aria-pressed={userRole === 'dj'}>
+                      <Headphones size={17} /> Hive Host
+                    </button>
+                  </div>
+                </div>}
                 <div>
                   <button onClick={() => setShowMusicSources(!showMusicSources)} className="w-full flex items-center justify-between rounded-xl bg-[#111] p-4 text-left border border-white/10 text-white hover:border-yellow-500/50 transition-colors">
                     <div>
@@ -1229,12 +1227,6 @@ export default function BeatHiveApp() {
                   </AnimatePresence>
                 </div>
 
-                <div className="pt-4 border-t border-white/5">
-                  <div className="flex items-center justify-between text-gray-400 bg-white/5 rounded-xl p-4">
-                     <span className="text-sm font-semibold">User ID</span>
-                     <span className="text-xs font-mono bg-black rounded p-1.5">USR-8X92</span>
-                  </div>
-                </div>
               </div>
             </motion.div>
           </motion.div>
@@ -1260,7 +1252,33 @@ function EnergyControls({ energyPreference, onEnergyChange }: { energyPreference
   );
 }
 
-function ActionList({ userRole, energyPreference, onEnergyChange }: { userRole: string; energyPreference: 'up' | 'down' | null; onEnergyChange: React.Dispatch<React.SetStateAction<'up' | 'down' | null>> }) {
+type ActionControlsProps = {
+  actionId: string;
+  userRole: string;
+  energyPreference: 'up' | 'down' | null;
+  onEnergyChange: React.Dispatch<React.SetStateAction<'up' | 'down' | null>>;
+  selectedVibe: string | null;
+  onVibeChange: React.Dispatch<React.SetStateAction<string | null>>;
+  lastShoutout: string | null;
+  onShoutout: React.Dispatch<React.SetStateAction<string | null>>;
+  tipTotal: number;
+  onTip: (amount: number) => void;
+};
+
+function ActionControls({ actionId, userRole, energyPreference, onEnergyChange, selectedVibe, onVibeChange, lastShoutout, onShoutout, tipTotal, onTip }: ActionControlsProps) {
+  const [shoutoutDraft, setShoutoutDraft] = useState('');
+
+  if (actionId === 'hive') return <NextLink href="/hive" className="mt-1 flex w-full items-center justify-center gap-2 rounded-lg bg-yellow-500 px-4 py-3 font-bold text-black hover:bg-yellow-400"><Users size={18} /> Enter the Hive</NextLink>;
+  if (actionId === 'request') return <NextLink href="/youtube" className="mt-1 flex w-full items-center justify-center gap-2 rounded-lg bg-yellow-500 px-4 py-3 font-bold text-black hover:bg-yellow-400"><Search size={18} /> Find a track</NextLink>;
+  if (actionId === 'queue' || actionId === 'upvote') return <NextLink href="/youtube" className="mt-1 flex w-full items-center justify-center gap-2 rounded-lg bg-yellow-500 px-4 py-3 font-bold text-black hover:bg-yellow-400">{actionId === 'upvote' ? <ThumbsUp size={18} /> : <ListMusic size={18} />}{actionId === 'upvote' ? ' Vote on requests' : ' View your queue'}</NextLink>;
+  if (actionId === 'energy') return <EnergyControls energyPreference={energyPreference} onEnergyChange={onEnergyChange} />;
+  if (actionId === 'vibes') return <div className="flex flex-wrap gap-2 pt-1">{GENRE_TALLIES.map((genre) => <button key={genre.name} type="button" onClick={(event) => { event.stopPropagation(); onVibeChange((currentVibe) => currentVibe === genre.name ? null : genre.name); }} aria-pressed={selectedVibe === genre.name} className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${selectedVibe === genre.name ? 'bg-yellow-500 text-black' : 'bg-white/5 text-gray-200 hover:bg-yellow-500 hover:text-black'}`}><span>{genre.name}</span>{userRole === 'dj' && <span className="text-[10px] opacity-70">{genre.count}</span>}</button>)}</div>;
+  if (actionId === 'shoutout') return <form className="space-y-2 pt-1" onSubmit={(event) => { event.preventDefault(); const message = shoutoutDraft.trim(); if (!message) return; onShoutout(message); setShoutoutDraft(''); }}><label className="sr-only" htmlFor="shoutout-message">Message for the Hive Host</label><textarea id="shoutout-message" value={shoutoutDraft} onChange={(event) => setShoutoutDraft(event.target.value)} onClick={(event) => event.stopPropagation()} maxLength={180} placeholder="Send a message to the Hive Host" className="min-h-20 w-full resize-none rounded-lg border border-white/10 bg-white/5 p-3 text-sm text-white outline-none placeholder:text-gray-500 focus:border-yellow-500" /><button type="submit" className="flex w-full items-center justify-center gap-2 rounded-lg bg-yellow-500 px-4 py-3 text-sm font-bold text-black hover:bg-yellow-400"><MessageSquare size={17} /> Send shoutout</button>{lastShoutout && <p className="text-center text-xs text-gray-400">Last sent: {lastShoutout}</p>}</form>;
+  if (actionId === 'tip') return <div className="space-y-2 pt-1"><div className="grid grid-cols-3 gap-2">{[2, 5, 10].map((amount) => <button key={amount} type="button" onClick={(event) => { event.stopPropagation(); onTip(amount); }} className="rounded-lg bg-white/5 px-3 py-3 text-sm font-bold text-gray-100 hover:bg-pink-500 hover:text-white">${amount}</button>)}</div><p className="text-center text-xs text-gray-400">Support recorded: ${tipTotal.toFixed(2)}. Payments require a connected payment provider.</p></div>;
+  return null;
+}
+
+function ActionList({ userRole, energyPreference, onEnergyChange, selectedVibe, onVibeChange, lastShoutout, onShoutout, tipTotal, onTip }: Omit<ActionControlsProps, 'actionId'>) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   return (
@@ -1271,8 +1289,9 @@ function ActionList({ userRole, energyPreference, onEnergyChange }: { userRole: 
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: i * 0.05 }}
           key={item.id}
+          data-tutorial-target={item.id === 'request' ? 'guest-request-action' : item.id === 'hive' ? 'guest-hive-action' : item.id === 'upvote' ? 'guest-upvote-action' : item.id === 'energy' ? 'guest-feedback-action' : undefined}
           className="bg-[#1a1a1a] border border-[#333] hover:border-yellow-500/50 transition-colors p-4 rounded-2xl flex flex-col gap-4 cursor-pointer group"
-          onClick={() => setExpandedId(expandedId === item.id ? null : item.id)}
+          onClick={() => item.id === 'hive' ? window.location.assign('/hive') : setExpandedId(expandedId === item.id ? null : item.id)}
         >
           <div className="flex items-center gap-4">
             <div className="w-14 h-14 shrink-0 flex items-center justify-center text-gray-400 group-hover:text-black transition-all relative">
@@ -1287,63 +1306,9 @@ function ActionList({ userRole, energyPreference, onEnergyChange }: { userRole: 
           </div>
           
           <AnimatePresence>
-            {item.id === 'request' && expandedId === 'request' && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="overflow-hidden"
-              >
-                <NextLink href="/youtube" onClick={(event) => event.stopPropagation()} className="mt-1 flex w-full items-center justify-center gap-2 rounded-lg bg-yellow-500 px-4 py-3 font-bold text-black hover:bg-yellow-400">
-                  <Search size={18} /> Find a track
-                </NextLink>
-              </motion.div>
-            )}
-            {item.id === 'queue' && expandedId === 'queue' && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="overflow-hidden"
-              >
-                <NextLink href="/youtube" onClick={(event) => event.stopPropagation()} className="mt-1 flex w-full items-center justify-center gap-2 rounded-lg bg-yellow-500 px-4 py-3 font-bold text-black hover:bg-yellow-400">
-                  <ListMusic size={18} /> View your queue
-                </NextLink>
-              </motion.div>
-            )}
-            {item.id === 'energy' && expandedId === 'energy' && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="overflow-hidden"
-              >
-                <EnergyControls energyPreference={energyPreference} onEnergyChange={onEnergyChange} />
-              </motion.div>
-            )}
-            {item.id === 'vibes' && expandedId === 'vibes' && (
-              <motion.div 
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="overflow-hidden"
-              >
-                <div className="pt-3 border-t border-white/10 flex flex-wrap gap-2">
-                  {GENRE_TALLIES.map((genre) => (
-                    <button 
-                      key={genre.name}
-                      onClick={(e) => e.stopPropagation()}
-                      className="group/btn px-3 py-1.5 rounded-full bg-[#222] border border-white/10 text-xs text-white hover:border-yellow-500 hover:text-yellow-500 transition-colors flex items-center gap-2"
-                    >
-                      <span>{genre.name}</span>
-                      {userRole === 'dj' && (
-                        <span className="bg-white/10 text-gray-400 group-hover/btn:bg-yellow-500/20 group-hover/btn:text-yellow-500 px-1.5 py-0.5 rounded text-[9px] font-mono leading-none transition-colors">
-                          {genre.count}
-                        </span>
-                      )}
-                    </button>
-                  ))}
-                </div>
+            {expandedId === item.id && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
+                <ActionControls actionId={item.id} userRole={userRole} energyPreference={energyPreference} onEnergyChange={onEnergyChange} selectedVibe={selectedVibe} onVibeChange={onVibeChange} lastShoutout={lastShoutout} onShoutout={onShoutout} tipTotal={tipTotal} onTip={onTip} />
               </motion.div>
             )}
           </AnimatePresence>
@@ -1353,7 +1318,7 @@ function ActionList({ userRole, energyPreference, onEnergyChange }: { userRole: 
   );
 }
 
-function SphereCarousel({ userRole, energyPreference, onEnergyChange }: { userRole: string; energyPreference: 'up' | 'down' | null; onEnergyChange: React.Dispatch<React.SetStateAction<'up' | 'down' | null>> }) {
+function SphereCarousel({ userRole, energyPreference, onEnergyChange, selectedVibe, onVibeChange, lastShoutout, onShoutout, tipTotal, onTip }: Omit<ActionControlsProps, 'actionId'>) {
   const rotX = useMotionValue(initTargetX);
   const rotY = useMotionValue(initTargetY);
   
@@ -1561,10 +1526,14 @@ function SphereCarousel({ userRole, energyPreference, onEnergyChange }: { userRo
   };
 
   const handleClickItem = (item: any) => {
+    if (item.id.replace(/-\d+$/, '') === 'hive') {
+      window.location.assign('/hive');
+      return;
+    }
     snapToItem(item);
   };
 
-  const activeItem = ALL_ITEMS.find(i => i.id === activeId) || ALL_ITEMS[0];
+  const activeItem = ALL_ITEMS.find(item => item.id === activeId) || ALL_ITEMS[0];
 
   return (
     <div className="relative w-full max-w-[420px] mx-auto flex flex-col items-center justify-start flex-1 -mt-2">
@@ -1581,14 +1550,7 @@ function SphereCarousel({ userRole, energyPreference, onEnergyChange }: { userRo
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[330px] h-[330px] rounded-full bg-gradient-to-tr from-yellow-500/10 to-transparent border border-white/5 shadow-[inset_0_0_20px_rgba(255,255,255,0.05),0_0_40px_rgba(0,0,0,0.5)] pointer-events-none">
         </div>
         {HIVE_ITEMS_3D.map((item) => (
-          <SphereItem 
-            key={item.id} 
-            item={item} 
-            rotX={rotX} 
-            rotY={rotY} 
-            isActive={activeId === item.id} 
-            onClick={() => handleClickItem(item)}
-          />
+          <SphereItem key={item.id} item={item} rotX={rotX} rotY={rotY} isActive={activeId === item.id} onClick={() => handleClickItem(item)} />
         ))}
       </div>
       <p className="text-[10px] text-[#555] font-bold tracking-widest uppercase">Drag freely • Tap to Snap</p>
@@ -1606,43 +1568,7 @@ function SphereCarousel({ userRole, energyPreference, onEnergyChange }: { userRo
               <h3 className="text-2xl font-black text-yellow-500 mb-1 tracking-tight">{activeItem.title}</h3>
               <p className="text-sm font-medium text-gray-300 mb-3 px-4">{activeItem.description}</p>
               
-              {activeId.startsWith('vibes') && (
-                <motion.div 
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  className="flex flex-wrap justify-center gap-2 mb-4 px-4 max-h-[140px] overflow-y-auto scrollbar-hide stylish-scrollbar"
-                >
-                  {GENRE_TALLIES.map(genre => (
-                    <button 
-                      key={genre.name}
-                      className="group/btn px-3 py-1.5 rounded-full bg-[#222] border border-white/10 text-xs text-white hover:border-yellow-500 hover:text-yellow-500 transition-colors flex items-center gap-2"
-                    >
-                      <span>{genre.name}</span>
-                      {userRole === 'dj' && (
-                        <span className="bg-white/10 text-gray-400 group-hover/btn:bg-yellow-500/20 group-hover/btn:text-yellow-500 px-1.5 py-0.5 rounded text-[9px] font-mono leading-none transition-colors">
-                          {genre.count}
-                        </span>
-                      )}
-                    </button>
-                  ))}
-                </motion.div>
-              )}
-
-              {activeId.startsWith('energy') && (
-                <EnergyControls energyPreference={energyPreference} onEnergyChange={onEnergyChange} />
-              )}
-
-              {activeId.startsWith('request') && (
-                <NextLink href="/youtube" className="mx-auto flex w-fit items-center justify-center gap-2 rounded-lg bg-yellow-500 px-4 py-3 text-sm font-bold text-black hover:bg-yellow-400">
-                  <Search size={18} /> Find a track
-                </NextLink>
-              )}
-
-              {activeId.startsWith('queue') && (
-                <NextLink href="/youtube" className="mx-auto flex w-fit items-center justify-center gap-2 rounded-lg bg-yellow-500 px-4 py-3 text-sm font-bold text-black hover:bg-yellow-400">
-                  <ListMusic size={18} /> View your queue
-                </NextLink>
-              )}
+              <ActionControls actionId={activeItem.id.replace(/-\d+$/, '')} userRole={userRole} energyPreference={energyPreference} onEnergyChange={onEnergyChange} selectedVibe={selectedVibe} onVibeChange={onVibeChange} lastShoutout={lastShoutout} onShoutout={onShoutout} tipTotal={tipTotal} onTip={onTip} />
             </motion.div>
         </AnimatePresence>
       </div>

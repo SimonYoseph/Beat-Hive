@@ -16,6 +16,9 @@ type Settings = {
   isAnonymousDJ?: boolean;
   customIcon?: string | null;
   energyPreference?: "up" | "down" | null;
+  selectedVibe?: string | null;
+  lastShoutout?: string | null;
+  tipTotal?: number;
 };
 
 type SettingsByUser = Record<string, Settings>;
@@ -43,6 +46,9 @@ function sanitizeSettings(value: unknown): Settings {
   const musicSource = settings.musicSource;
   const customIcon = settings.customIcon;
   const energyPreference = settings.energyPreference;
+  const selectedVibe = settings.selectedVibe;
+  const lastShoutout = settings.lastShoutout;
+  const tipTotal = settings.tipTotal;
 
   return {
     ...(userRole === "none" || userRole === "dj" || userRole === "guest" ? { userRole } : {}),
@@ -52,6 +58,9 @@ function sanitizeSettings(value: unknown): Settings {
     ...(typeof settings.isAnonymousDJ === "boolean" ? { isAnonymousDJ: settings.isAnonymousDJ } : {}),
     ...(typeof customIcon === "string" && customIcon.length <= 1_500_000 ? { customIcon } : customIcon === null ? { customIcon: null } : {}),
     ...(energyPreference === "up" || energyPreference === "down" || energyPreference === null ? { energyPreference } : {}),
+    ...(typeof selectedVibe === "string" && selectedVibe.length <= 40 ? { selectedVibe } : selectedVibe === null ? { selectedVibe: null } : {}),
+    ...(typeof lastShoutout === "string" && lastShoutout.length <= 180 ? { lastShoutout } : lastShoutout === null ? { lastShoutout: null } : {}),
+    ...(typeof tipTotal === "number" && Number.isFinite(tipTotal) && tipTotal >= 0 && tipTotal <= 1_000_000 ? { tipTotal } : {}),
   };
 }
 

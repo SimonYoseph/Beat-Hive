@@ -18,7 +18,7 @@ const geistMono = localFont({
 
 export const metadata: Metadata = {
   title: "Beat Hive",
-  description: "Join the crowd. Control the music. Tip the DJ.",
+  description: "Join the crowd. Control the music. Tip the Hive Host.",
 };
 
 export const viewport = {

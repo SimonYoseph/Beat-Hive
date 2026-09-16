@@ -2,10 +2,12 @@
 
 import { SessionProvider } from "next-auth/react";
 
+import { PlaybackProvider } from "./playback-provider";
+
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <SessionProvider>
-      {children}
+      <PlaybackProvider>{children}</PlaybackProvider>
     </SessionProvider>
   );
 }

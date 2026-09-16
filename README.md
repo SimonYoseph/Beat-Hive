@@ -44,7 +44,7 @@ NEXTAUTH_SECRET=a-long-random-secret
 NEXT_PUBLIC_YOUTUBE_API_KEY=your-youtube-data-api-key
 ```
 
-Enable YouTube Data API v3 in the associated Google Cloud project. Connected users grant `youtube.force-ssl`, allowing Beat Hive to add selected tracks to a private `BeatHive Queue` YouTube playlist.
+Enable YouTube Data API v3 in the associated Google Cloud project. A Google account used with either YouTube or YouTube Music can connect and grant `youtube.force-ssl`, allowing Beat Hive to add selected tracks to a private `BeatHive Queue` YouTube playlist. That playlist is available in the same account's YouTube library; YouTube Music's native play queue is not exposed through a public API.
 
 Local request queuing is independent of the connected playlist: a song stays in **Your queue** even when the playlist update is unavailable or fails.
 

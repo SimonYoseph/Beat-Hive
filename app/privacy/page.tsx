@@ -31,7 +31,7 @@ export default function PrivacyPolicy() {
             <ul className="list-disc pl-5 space-y-2 text-gray-400">
               <li>Information you give us directly (e.g., account details, email address).</li>
               <li>Information we get from your use of BeatHive (e.g., connection logs, device information for pairing).</li>
-              <li>Music preferences and song requests made during live DJ sessions.</li>
+              <li>Music preferences and song requests made during live Hive Host sessions.</li>
             </ul>
           </section>
 

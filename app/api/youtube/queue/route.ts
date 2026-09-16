@@ -46,7 +46,7 @@ async function youtubeRequest<T>(
 function errorResponse(error: string | undefined, status?: number) {
   if (status === 401 || status === 403) {
     return NextResponse.json(
-      { error: "Your YouTube permission has expired. Reconnect YouTube Music, then try again." },
+      { error: "Your YouTube permission has expired. Reconnect YouTube, then try again." },
       { status: 401 },
     );
   }
@@ -60,7 +60,7 @@ export async function POST(request: Request) {
 
   if (!accessToken) {
     return NextResponse.json(
-      { error: "Reconnect your YouTube Music account to queue tracks." },
+      { error: "Connect a YouTube or YouTube Music account to update your playlist." },
       { status: 401 },
     );
   }

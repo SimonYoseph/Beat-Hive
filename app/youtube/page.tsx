@@ -34,14 +34,16 @@ function toQueuedTrack(track: SearchResult): QueuedTrack {
 }
 
 type QueueTrackItemProps = {
-  track: QueuedTrack;
+  track: RequestedTrack;
   index: number;
   isPlaying: boolean;
   canReorder: boolean;
+  showUpvoteCount: boolean;
   onRemove: (videoId: string) => void;
+  onUpvote: (videoId: string) => void;
 };
 
-function QueueTrackItem({ track, index, isPlaying, canReorder, onRemove }: QueueTrackItemProps) {
+function QueueTrackItem({ track, index, isPlaying, canReorder, showUpvoteCount, onRemove, onUpvote }: QueueTrackItemProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: track.videoId,
     disabled: !canReorder,
@@ -60,6 +62,9 @@ function QueueTrackItem({ track, index, isPlaying, canReorder, onRemove }: Queue
       </div>
       <div className="flex shrink-0 items-center gap-2">
         {isPlaying && <span className="text-xs font-bold text-yellow-500">Playing</span>}
+        <button onClick={() => onUpvote(track.videoId)} className={`flex h-8 items-center justify-center rounded bg-white/5 text-sm text-gray-300 hover:bg-yellow-500 hover:text-black ${showUpvoteCount ? "gap-1 px-2" : "w-8"}`} aria-label={`Upvote ${track.title}`} title="Upvote">
+          <ThumbsUp size={15} /> {showUpvoteCount && track.upvotes}
+        </button>
         {canReorder && (
           <button type="button" className="flex h-8 w-8 touch-none cursor-grab items-center justify-center rounded bg-white/5 text-gray-300 hover:bg-yellow-500 hover:text-black active:cursor-grabbing" aria-label={`Drag ${track.title} to reorder`} title="Drag to reorder" {...attributes} {...listeners}>
             <Menu size={18} />
@@ -83,13 +88,18 @@ export default function YoutubePage() {
   const [queueingId, setQueueingId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [requestTracks, setRequestTracks] = useState<RequestedTrack[]>([]);
-  const [playQueue, setPlayQueue] = useState<QueuedTrack[]>([]);
+  const [playQueue, setPlayQueue] = useState<RequestedTrack[]>([]);
   const [playedTracks, setPlayedTracks] = useState<QueuedTrack[]>([]);
   const [nowPlayingId, setNowPlayingId] = useState<string | null>(null);
   const [isQueueCollapsed, setIsQueueCollapsed] = useState(false);
   const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
+  const [isHost, setIsHost] = useState(false);
   const searchFormRef = useRef<HTMLFormElement>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+
+  useEffect(() => {
+    setIsHost(window.localStorage.getItem("bh_userRole") === '"dj"');
+  }, []);
 
   useEffect(() => {
     const savedRequests = window.localStorage.getItem("bh_youtube_requests");
@@ -100,7 +110,9 @@ export default function YoutubePage() {
       const storedTracks = savedTracks.filter((track): track is QueuedTrack => typeof track !== "string").map((track) => ({ ...track, upvotes: typeof (track as RequestedTrack).upvotes === "number" ? (track as RequestedTrack).upvotes : 0 }));
       const legacyIds = savedTracks.filter((track): track is string => typeof track === "string");
       const savedPlayQueue = window.localStorage.getItem("bh_play_queue");
-      const storedPlayQueue = savedPlayQueue ? JSON.parse(savedPlayQueue) as QueuedTrack[] : storedTracks;
+      const storedPlayQueue = savedPlayQueue
+        ? (JSON.parse(savedPlayQueue) as Array<QueuedTrack | string>).filter((track): track is QueuedTrack => typeof track !== "string").map((track) => ({ ...track, upvotes: typeof (track as RequestedTrack).upvotes === "number" ? (track as RequestedTrack).upvotes : 0 }))
+        : storedTracks;
       setRequestTracks(storedTracks);
       setPlayQueue(storedPlayQueue);
       if (!savedPlayQueue && storedTracks.length > 0) {
@@ -177,6 +189,20 @@ export default function YoutubePage() {
   }, []);
 
   useEffect(() => {
+    function loadPlayQueue() {
+      try {
+        const savedPlayQueue = JSON.parse(window.localStorage.getItem("bh_play_queue") || "[]") as QueuedTrack[];
+        setPlayQueue(savedPlayQueue.map((track) => ({ ...track, upvotes: typeof (track as RequestedTrack).upvotes === "number" ? (track as RequestedTrack).upvotes : 0 })));
+      } catch {
+        setPlayQueue([]);
+      }
+    }
+
+    window.addEventListener("bh-playback-change", loadPlayQueue);
+    return () => window.removeEventListener("bh-playback-change", loadPlayQueue);
+  }, []);
+
+  useEffect(() => {
     function loadNowPlaying() {
       try {
         const savedTrack = window.localStorage.getItem("bh_now_playing");
@@ -189,7 +215,11 @@ export default function YoutubePage() {
 
     loadNowPlaying();
     window.addEventListener("storage", loadNowPlaying);
-    return () => window.removeEventListener("storage", loadNowPlaying);
+    window.addEventListener("bh-playback-change", loadNowPlaying);
+    return () => {
+      window.removeEventListener("storage", loadNowPlaying);
+      window.removeEventListener("bh-playback-change", loadNowPlaying);
+    };
   }, []);
 
   function addLocalRequest(track: SearchResult) {
@@ -202,28 +232,21 @@ export default function YoutubePage() {
     const activePlayIndex = playQueue.findIndex((track) => track.videoId === nowPlayingId);
     const hasUpcomingTrack = activePlayIndex >= 0 ? activePlayIndex < playQueue.length - 1 : playQueue.length > 0;
     if (!hasUpcomingTrack) {
-      const nextPlayQueue = [...playQueue, queuedTrack];
+      const nextPlayQueue = [...playQueue, { ...queuedTrack, upvotes: 0 }];
       setPlayQueue(nextPlayQueue);
       window.localStorage.setItem("bh_play_queue", JSON.stringify(nextPlayQueue));
     }
     if (playQueue.length === 0) {
       window.localStorage.setItem("bh_now_playing", JSON.stringify(queuedTrack));
       window.localStorage.setItem("bh_queue_autoplay", "true");
+      window.dispatchEvent(new Event("bh-playback-change"));
     }
   }
 
-  function upvoteRequest(videoId: string) {
-    const request = requestTracks.find((track) => track.videoId === videoId);
-    if (!request) return;
-
-    const nextRequests = requestTracks.map((track) => track.videoId === videoId ? { ...track, upvotes: track.upvotes + 1 } : track);
-    setRequestTracks(nextRequests);
-    window.localStorage.setItem("bh_youtube_requests", JSON.stringify(nextRequests));
-    if (!playQueue.some((track) => track.videoId === videoId)) {
-      const nextPlayQueue = [...playQueue, request];
-      setPlayQueue(nextPlayQueue);
-      window.localStorage.setItem("bh_play_queue", JSON.stringify(nextPlayQueue));
-    }
+  function upvoteHiveTrack(videoId: string) {
+    const nextPlayQueue = playQueue.map((track) => track.videoId === videoId ? { ...track, upvotes: track.upvotes + 1 } : track);
+    setPlayQueue(nextPlayQueue);
+    window.localStorage.setItem("bh_play_queue", JSON.stringify(nextPlayQueue));
   }
 
   function removeRequest(videoId: string) {
@@ -338,13 +361,13 @@ export default function YoutubePage() {
           <Music2 className="text-red-500" size={32} />
           <div>
             <h1 className="text-3xl font-black">Request Music</h1>
-            <p className="text-sm text-gray-400">Search YouTube Music or paste a YouTube Music link.</p>
+            <p className="text-sm text-gray-400">Search YouTube or YouTube Music, or paste a video link.</p>
           </div>
         </div>
 
         <form ref={searchFormRef} onSubmit={searchTracks} className="relative flex gap-2">
           <label className="sr-only" htmlFor="track-search">Search songs</label>
-          <input id="track-search" value={query} onChange={(event) => { setQuery(event.target.value); setAreSuggestionsDismissed(false); }} onKeyDown={handleSearchKeyDown} placeholder="Song, artist, or YouTube Music link" className="min-w-0 flex-1 rounded-lg border border-white/15 bg-[#1b1b1b] px-4 py-3 text-white outline-none placeholder:text-gray-500 focus:border-yellow-500" aria-autocomplete="list" aria-controls="track-suggestions" />
+          <input id="track-search" value={query} onChange={(event) => { setQuery(event.target.value); setAreSuggestionsDismissed(false); }} onKeyDown={handleSearchKeyDown} placeholder="Song, artist, or YouTube link" className="min-w-0 flex-1 rounded-lg border border-white/15 bg-[#1b1b1b] px-4 py-3 text-white outline-none placeholder:text-gray-500 focus:border-yellow-500" aria-autocomplete="list" aria-controls="track-suggestions" />
           <button type="submit" disabled={isSearching} className="flex w-12 items-center justify-center rounded-lg bg-yellow-500 text-black hover:bg-yellow-400 disabled:opacity-60" aria-label="Search tracks">
             {isSearching ? <LoaderCircle className="animate-spin" size={20} /> : <Search size={20} />}
           </button>
@@ -365,11 +388,11 @@ export default function YoutubePage() {
             <div className="grid gap-6 md:grid-cols-2">
               <section>
                 <div className="relative mb-2 text-center"><h3 className="font-bold">Your queue</h3><span className="absolute right-0 top-0 text-sm text-gray-500">{requestTracks.length}</span></div>
-                {requestTracks.length === 0 ? <p className="text-sm text-gray-500">Songs you request will appear here.</p> : <div className="space-y-2">{requestTracks.map((track) => <article key={track.videoId} className="flex items-center gap-2 rounded-lg bg-[#1b1b1b] p-3"><div className="min-w-0 flex-1"><h4 className="truncate font-bold">{track.title}</h4><p className="truncate text-sm text-gray-400">{track.channelTitle}</p></div><button onClick={() => upvoteRequest(track.videoId)} className="flex h-8 items-center gap-1 rounded bg-white/5 px-2 text-sm text-gray-300 hover:bg-yellow-500 hover:text-black" aria-label={`Upvote ${track.title}`}><ThumbsUp size={15} /> {track.upvotes}</button><button onClick={() => removeRequest(track.videoId)} className="flex h-8 w-8 items-center justify-center rounded bg-white/5 text-gray-400 hover:bg-red-500 hover:text-white" aria-label={`Remove ${track.title} from requests`} title="Remove request"><Trash2 size={14} /></button></article>)}</div>}
+                {requestTracks.length === 0 ? <p className="text-sm text-gray-500">Songs you request will appear here.</p> : <div className="space-y-2">{requestTracks.map((track) => <article key={track.videoId} className="flex items-center gap-2 rounded-lg bg-[#1b1b1b] p-3"><div className="min-w-0 flex-1"><h4 className="truncate font-bold">{track.title}</h4><p className="truncate text-sm text-gray-400">{track.channelTitle}</p></div><button onClick={() => removeRequest(track.videoId)} className="flex h-8 w-8 items-center justify-center rounded bg-white/5 text-gray-400 hover:bg-red-500 hover:text-white" aria-label={`Remove ${track.title} from requests`} title="Remove request"><Trash2 size={14} /></button></article>)}</div>}
               </section>
               <section>
                 <div className="relative mb-2 text-center"><h3 className="font-bold">Hive Queue</h3><span className="absolute right-0 top-0 text-sm text-gray-500">{playQueue.length}</span></div>
-                {playQueue.length === 0 ? <p className="text-sm text-gray-500">Upvoted requests will play here.</p> : <DndContext sensors={sensors} onDragEnd={handleDragEnd}><SortableContext items={movableTrackIds} strategy={verticalListSortingStrategy}><div className="space-y-2">{playQueue.map((track, index) => <QueueTrackItem key={track.videoId} track={track} index={index} isPlaying={track.videoId === nowPlayingId} canReorder={index >= firstMovableIndex} onRemove={removeTrack} />)}</div></SortableContext></DndContext>}
+                {playQueue.length === 0 ? <p className="text-sm text-gray-500">Upvoted requests will play here.</p> : <DndContext sensors={sensors} onDragEnd={handleDragEnd}><SortableContext items={movableTrackIds} strategy={verticalListSortingStrategy}><div className="space-y-2">{playQueue.map((track, index) => <QueueTrackItem key={track.videoId} track={track} index={index} isPlaying={track.videoId === nowPlayingId} canReorder={index >= firstMovableIndex} showUpvoteCount={isHost} onRemove={removeTrack} onUpvote={upvoteHiveTrack} />)}</div></SortableContext></DndContext>}
               </section>
             </div>
           )}
@@ -397,7 +420,7 @@ export default function YoutubePage() {
         </div>
         {!session && (
           <button onClick={() => signIn("google", { callbackUrl: "/youtube" })} className="mt-8 rounded-lg border border-white/15 px-4 py-2 text-sm font-bold text-gray-200 hover:border-yellow-500 hover:text-white">
-            Connect YouTube Music to manage your playlist
+            Connect YouTube to manage your playlist
           </button>
         )}
       </section>

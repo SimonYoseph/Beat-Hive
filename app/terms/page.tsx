@@ -35,14 +35,14 @@ export default function TermsOfService() {
             <h2 className="text-xl font-bold text-yellow-500">2. Usage Rights</h2>
             <p>
               BeatHive grants you a personal, non-transferable, non-exclusive license to use the software for interactive 
-              music queue management. DJs are responsible for the legal rights to play the music broadcasted during their sessions.
+              music queue management. Hive Hosts are responsible for the legal rights to play the music broadcasted during their sessions.
             </p>
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-xl font-bold text-yellow-500">3. DJ Responsibilities & Tipping</h2>
+            <h2 className="text-xl font-bold text-yellow-500">3. Hive Host Responsibilities & Tipping</h2>
             <ul className="list-disc pl-5 space-y-2 text-gray-400">
-              <li>DJs retain the right to accept or reject song requests at their discretion.</li>
+              <li>Hive Hosts retain the right to accept or reject song requests at their discretion.</li>
               <li>All tips and financial transactions processed through the platform are final. BeatHive may take a nominal processing fee for facilitation.</li>
               <li>BeatHive is a tool for event management and does not guarantee the quality, safety, or legality of individual events.</li>
             </ul>
@@ -51,7 +51,7 @@ export default function TermsOfService() {
           <section className="space-y-3">
             <h2 className="text-xl font-bold text-yellow-500">4. User Conduct</h2>
             <p>
-              Users agree not to use the Service to spam requests, harass DJs or other attendees, or transmit any 
+              Users agree not to use the Service to spam requests, harass Hive Hosts or other attendees, or transmit any 
               inappropriate or harmful content through the platform&apos;s messaging systems.
             </p>
           </section>
