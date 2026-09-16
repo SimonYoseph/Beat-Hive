@@ -21,6 +21,14 @@ export const metadata: Metadata = {
   description: "Join the crowd. Control the music. Tip the DJ.",
 };
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
