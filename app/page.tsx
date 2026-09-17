@@ -303,6 +303,7 @@ export default function BeatHiveApp() {
   const [roomCode, setRoomCode] = usePersistedState('bh_roomCode', '');
   const [joinedRoom] = usePersistedState<{ code: string; hostName: string; hostEmail: string; roomName: string } | null>('bh_joinedRoom', null);
   const [shareStatus, setShareStatus] = useState('');
+  const [newRequestCount, setNewRequestCount] = useState(0);
 
   // Guest State
   const [qrExpanded, setQrExpanded] = usePersistedState('bh_qrExpanded', false);
@@ -325,6 +326,24 @@ export default function BeatHiveApp() {
     window.addEventListener('bh-master-control-change', syncMasterControl);
     return () => window.removeEventListener('bh-master-control-change', syncMasterControl);
   }, [setIsMasterControlEnabled]);
+
+  useEffect(() => {
+    const loadRequestCount = () => {
+      try {
+        const requests = JSON.parse(window.localStorage.getItem('bh_youtube_requests') || '[]') as unknown[];
+        setNewRequestCount(requests.length);
+      } catch {
+        setNewRequestCount(0);
+      }
+    };
+    loadRequestCount();
+    window.addEventListener('storage', loadRequestCount);
+    window.addEventListener('bh-playback-change', loadRequestCount);
+    return () => {
+      window.removeEventListener('storage', loadRequestCount);
+      window.removeEventListener('bh-playback-change', loadRequestCount);
+    };
+  }, []);
 
   useEffect(() => {
     let isCurrent = true;
@@ -861,15 +880,15 @@ export default function BeatHiveApp() {
           </div>
 
           <div className="grid grid-cols-2 gap-4 flex-1">
-             <div className="bg-[#1a1a1a] rounded-2xl p-4 border border-white/5 flex flex-col">
+             <NextLink href="/youtube" className="bg-[#1a1a1a] rounded-2xl p-4 border border-white/5 flex flex-col transition-colors hover:border-yellow-500/50">
                 <Search className="text-yellow-500 mb-2" size={24} />
-                <span className="text-3xl font-black text-white">12</span>
+               <span className="text-3xl font-black text-white">{newRequestCount}</span>
                 <span className="text-sm text-gray-400 font-medium">New Requests</span>
-             </div>
+             </NextLink>
              <div className="bg-[#1a1a1a] rounded-2xl p-4 border border-white/5 flex flex-col">
                 <Speaker className="text-orange-500 mb-2" size={24} />
-                <span className="text-3xl font-black text-white">High</span>
-                <span className="text-sm text-gray-400 font-medium">Crowd Energy</span>
+               <span className="text-3xl font-black text-white">{energyPreference === 'up' ? 'High' : energyPreference === 'down' ? 'Low' : 'Steady'}</span>
+               <span className="text-sm text-gray-400 font-medium">Crowd Energy</span>
              </div>
              <div className="bg-[#1a1a1a] rounded-2xl p-4 border border-white/5 flex flex-col col-span-2">
                 <Heart className="text-pink-500 mb-2" size={24} />

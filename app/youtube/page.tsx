@@ -311,6 +311,7 @@ export default function YoutubePage() {
     const nextRequests = [...requestTracks, requestedTrack];
     setRequestTracks(nextRequests);
     window.localStorage.setItem("bh_youtube_requests", JSON.stringify(nextRequests));
+    window.dispatchEvent(new Event("bh-playback-change"));
 
     const activePlayIndex = playQueue.findIndex((track) => track.videoId === nowPlayingId);
     const hasUpcomingTrack = activePlayIndex >= 0 ? activePlayIndex < playQueue.length - 1 : playQueue.length > 0;
