@@ -914,7 +914,7 @@ export default function BeatHiveApp() {
              <NextLink href="/youtube" onClick={acknowledgeRequests} className="bg-[#1a1a1a] rounded-2xl p-4 border border-white/5 flex flex-col transition-colors hover:border-yellow-500/50">
                 <Search className="text-yellow-500 mb-2" size={24} />
                <span className="text-3xl font-black text-white">{newRequestCount}</span>
-                <span className="text-sm text-gray-400 font-medium">New Requests</span>
+                <span className="text-sm text-gray-400 font-medium">New Hive Queue Requests</span>
              </NextLink>
              <div className="bg-[#1a1a1a] rounded-2xl p-4 border border-white/5 flex flex-col">
                 <Speaker className="text-orange-500 mb-2" size={24} />
