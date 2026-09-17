@@ -231,14 +231,17 @@ export default function YoutubePage() {
 
     const activePlayIndex = playQueue.findIndex((track) => track.videoId === nowPlayingId);
     const hasUpcomingTrack = activePlayIndex >= 0 ? activePlayIndex < playQueue.length - 1 : playQueue.length > 0;
+    let nextPlayQueue = playQueue;
     if (!hasUpcomingTrack) {
-      const nextPlayQueue = [...playQueue, { ...queuedTrack, upvotes: 0 }];
+      nextPlayQueue = [...playQueue, { ...queuedTrack, upvotes: 0 }];
       setPlayQueue(nextPlayQueue);
       window.localStorage.setItem("bh_play_queue", JSON.stringify(nextPlayQueue));
     }
-    if (playQueue.length === 0) {
-      window.localStorage.setItem("bh_now_playing", JSON.stringify(queuedTrack));
+    if (!nowPlayingId) {
+      const nextTrack = nextPlayQueue[0] || queuedTrack;
+      window.localStorage.setItem("bh_now_playing", JSON.stringify(nextTrack));
       window.localStorage.setItem("bh_queue_autoplay", "true");
+      setNowPlayingId(nextTrack.videoId);
       window.dispatchEvent(new Event("bh-playback-change"));
     }
   }
