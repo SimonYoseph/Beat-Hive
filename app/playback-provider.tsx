@@ -1,7 +1,7 @@
 "use client";
 
 import ReactPlayer from "react-player";
-import { createContext, ReactNode, useContext, useEffect, useRef, useState } from "react";
+import { createContext, ReactNode, PointerEvent as ReactPointerEvent, useContext, useEffect, useRef, useState } from "react";
 import { Eye, EyeOff, Pause, Play, Settings2, SkipBack, SkipForward } from "lucide-react";
 import { useSession } from "next-auth/react";
 
@@ -53,7 +53,10 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const [isVideoHidden, setIsVideoHidden] = useState(false);
   const [isMasterControlEnabled, setIsMasterControlEnabled] = useState(true);
   const [isMasterPanelOpen, setIsMasterPanelOpen] = useState(false);
+  const [masterControlPosition, setMasterControlPosition] = useState({ x: 16, y: 16 });
   const playerRef = useRef<HTMLVideoElement>(null);
+  const masterDragRef = useRef<{ startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(null);
+  const masterDragCompletedRef = useRef(false);
   const isMasterAccount = session?.user?.email?.toLowerCase() === MASTER_CONTROL_EMAIL;
 
   function startPlayback() {
@@ -127,6 +130,29 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     window.dispatchEvent(new Event("bh-master-control-change"));
   }
 
+  function handleMasterPointerDown(event: ReactPointerEvent<HTMLButtonElement>) {
+    event.currentTarget.setPointerCapture(event.pointerId);
+    masterDragRef.current = { startX: event.clientX, startY: event.clientY, originX: masterControlPosition.x, originY: masterControlPosition.y, moved: false };
+  }
+
+  function handleMasterPointerMove(event: ReactPointerEvent<HTMLButtonElement>) {
+    const drag = masterDragRef.current;
+    if (!drag) return;
+    const distanceX = event.clientX - drag.startX;
+    const distanceY = event.clientY - drag.startY;
+    if (Math.hypot(distanceX, distanceY) > 5) drag.moved = true;
+    if (!drag.moved) return;
+    setMasterControlPosition({ x: Math.min(window.innerWidth - 44, Math.max(0, drag.originX + distanceX)), y: Math.min(window.innerHeight - 44, Math.max(0, drag.originY + distanceY)) });
+  }
+
+  function handleMasterPointerUp() {
+    masterDragCompletedRef.current = Boolean(masterDragRef.current?.moved);
+    if (masterDragCompletedRef.current) {
+      window.localStorage.setItem("bh_masterControlPosition", JSON.stringify(masterControlPosition));
+    }
+    masterDragRef.current = null;
+  }
+
   useEffect(() => {
     refreshPlayback();
     const handlePlaybackChange = () => refreshPlayback();
@@ -147,6 +173,15 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    try {
+      const savedPosition = JSON.parse(window.localStorage.getItem("bh_masterControlPosition") || "null") as { x?: number; y?: number } | null;
+      if (typeof savedPosition?.x === "number" && typeof savedPosition.y === "number") setMasterControlPosition({ x: savedPosition.x, y: savedPosition.y });
+    } catch {
+      // Use the default position when the saved value cannot be read.
+    }
+  }, []);
+
+  useEffect(() => {
     if (!nowPlaying?.videoId || !isPlaying) return;
     void playerRef.current?.play().catch(() => updateIsPlaying(false));
   }, [isPlaying, nowPlaying?.videoId]);
@@ -154,7 +189,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   return (
     <PlaybackContext.Provider value={{ nowPlaying, isPlaying, setNowPlaying, setIsPlaying: (playing) => playing ? startPlayback() : updateIsPlaying(false), refreshPlayback }}>
       {children}
-      {isMasterAccount && <div className="fixed bottom-4 left-4 z-50">
+      {isMasterAccount && <div className="fixed z-50" style={{ left: masterControlPosition.x, top: masterControlPosition.y }}>
         {isMasterPanelOpen && <div className="mb-2 flex items-center gap-1 rounded-lg border border-white/15 bg-[#171717]/95 p-2 shadow-2xl backdrop-blur">
           <button onClick={toggleMasterControl} role="switch" aria-checked={isMasterControlEnabled} title={isMasterControlEnabled ? "Switch to Hive User control" : "Switch to Master Control"} className={`flex h-9 items-center gap-2 rounded px-2 text-xs font-bold transition-colors ${isMasterControlEnabled ? "bg-yellow-500 text-black" : "bg-white/10 text-white"}`}>
             {isMasterControlEnabled ? "Master Control" : "Hive User"}
@@ -165,7 +200,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
             <button onClick={playNextTrack} disabled={!nowPlaying} aria-label="Play next song" title="Play next song" className="flex h-9 w-9 items-center justify-center rounded bg-white/10 text-white hover:bg-yellow-500 hover:text-black disabled:opacity-40"><SkipForward size={17} fill="currentColor" /></button>
           </>}
         </div>}
-        <button onClick={() => setIsMasterPanelOpen((open) => !open)} aria-label="Master control options" title="Master control options" className={`flex h-11 w-11 items-center justify-center rounded-lg border shadow-xl transition-colors ${isMasterControlEnabled ? "border-yellow-500/50 bg-yellow-500 text-black hover:bg-yellow-400" : "border-white/20 bg-black/85 text-white hover:border-yellow-500"}`}><Settings2 size={19} /></button>
+        <button onPointerDown={handleMasterPointerDown} onPointerMove={handleMasterPointerMove} onPointerUp={handleMasterPointerUp} onClick={(event) => { if (masterDragCompletedRef.current) { event.preventDefault(); masterDragCompletedRef.current = false; return; } setIsMasterPanelOpen((open) => !open); }} aria-label="Master control options" title="Master control options" className={`flex h-11 w-11 touch-none cursor-grab items-center justify-center rounded-lg border shadow-xl transition-colors active:cursor-grabbing ${isMasterControlEnabled ? "border-yellow-500/50 bg-yellow-500 text-black hover:bg-yellow-400" : "border-white/20 bg-black/85 text-white hover:border-yellow-500"}`}><Settings2 size={19} /></button>
       </div>}
       {nowPlaying?.videoId && (
         <>
