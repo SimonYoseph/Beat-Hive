@@ -2,7 +2,7 @@
 
 import { ArrowLeft, ArrowRight, Check, Globe2, Headphones, ListMusic, MessageSquare, Search, ThumbsUp, Users, X } from "lucide-react";
 import { motion } from "framer-motion";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type TutorialRole = "host" | "guest";
 
@@ -99,20 +99,13 @@ export function Tutorial({ role }: { role: TutorialRole }) {
   const [isOpen, setIsOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [targetBounds, setTargetBounds] = useState<DOMRect | null>(null);
+  const scrolledTargetRef = useRef<string | null>(null);
   const steps = role === "host" ? HOST_STEPS : GUEST_STEPS;
   const storageKey = `bh_tutorial_completed_${role}`;
   const step = steps[currentStep];
   const isWelcome = step.isWelcome === true;
   const isHivePreview = step.target === "guest-hive-action";
   const StepIcon = step.icon;
-  const tutorialCardStyle = targetBounds
-    ? {
-        left: Math.max(16, Math.min(targetBounds.left + targetBounds.width / 2 - 192, window.innerWidth - 400)),
-        ...(targetBounds.top > window.innerHeight / 2
-          ? { bottom: Math.max(16, window.innerHeight - targetBounds.top + 20), maxHeight: Math.max(160, targetBounds.top - 36) }
-          : { top: Math.max(16, targetBounds.bottom + 20), maxHeight: Math.max(160, window.innerHeight - targetBounds.bottom - 36) }),
-      }
-    : undefined;
 
   useEffect(() => {
     setCurrentStep(0);
@@ -120,8 +113,23 @@ export function Tutorial({ role }: { role: TutorialRole }) {
   }, [storageKey]);
 
   useEffect(() => {
+    if (!isOpen) return;
+    window.dispatchEvent(new Event("bh-tutorial-open"));
+    return () => window.dispatchEvent(new Event("bh-tutorial-close"));
+  }, [isOpen]);
+
+  useEffect(() => {
     if (isOpen && !isWelcome && role === "guest") window.dispatchEvent(new Event("bh-tutorial-guest-open"));
   }, [isOpen, isWelcome, role, step.target]);
+
+  useEffect(() => {
+    if (!isOpen || isWelcome) return;
+    const originalPaddingBottom = document.body.style.paddingBottom;
+    document.body.style.paddingBottom = `${window.innerHeight}px`;
+    return () => {
+      document.body.style.paddingBottom = originalPaddingBottom;
+    };
+  }, [isOpen, isWelcome]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -133,7 +141,11 @@ export function Tutorial({ role }: { role: TutorialRole }) {
         setTargetBounds(null);
         return;
       }
-      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      if (scrolledTargetRef.current !== step.target) {
+        target.scrollIntoView({ block: "start" });
+        window.scrollBy({ top: -96 });
+        scrolledTargetRef.current = step.target;
+      }
       setTargetBounds(target.getBoundingClientRect());
     };
     const targetObserver = new MutationObserver(updateTargetBounds);
@@ -160,8 +172,8 @@ export function Tutorial({ role }: { role: TutorialRole }) {
   return (
     <div className="fixed inset-0 z-[10000]" role="dialog" aria-modal="true" aria-labelledby="tutorial-title">
       {targetBounds && <div className="pointer-events-none fixed z-0 rounded-2xl border-2 border-yellow-400" style={{ top: targetBounds.top, left: targetBounds.left, width: targetBounds.width, height: targetBounds.height, boxShadow: "0 0 0 9999px rgba(0, 0, 0, 0.76)" }} />}
-      {!targetBounds && !isWelcome && <div className="pointer-events-none fixed inset-0 z-0 bg-black/75" />}
-      <section className={`fixed z-10 w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-lg border border-white/10 bg-[#111214] shadow-[0_24px_80px_rgba(0,0,0,0.55)] ${targetBounds ? "" : "bottom-4 left-4 sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2"}`} style={tutorialCardStyle}>
+      {!targetBounds && <div className="pointer-events-none fixed inset-0 z-0 bg-black/75" />}
+      <section className="fixed left-1/2 top-1/2 z-10 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-white/10 bg-[#111214] shadow-[0_24px_80px_rgba(0,0,0,0.55)]">
         <div className="p-5 sm:p-6">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-2" aria-label={`Step ${currentStep + 1} of ${steps.length}`}>

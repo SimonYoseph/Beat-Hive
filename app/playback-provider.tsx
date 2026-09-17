@@ -65,6 +65,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const [isMasterControlEnabled, setIsMasterControlEnabled] = useState(true);
   const [isHiveHost, setIsHiveHost] = useState(false);
   const [isMasterPanelOpen, setIsMasterPanelOpen] = useState(false);
+  const [isTutorialOpen, setIsTutorialOpen] = useState(false);
   const [masterControlPosition, setMasterControlPosition] = useState({ x: 16, y: 16 });
   const [masterControlSize, setMasterControlSize] = useState({ width: 440, height: 0 });
   const [masterSettings, setMasterSettings] = useState<MasterSettings>(DEFAULT_MASTER_SETTINGS);
@@ -78,6 +79,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const canControlSession = isMasterAccount || isHiveHost;
   const isSessionControlEnabled = isMasterAccount ? isMasterControlEnabled : isHiveHost;
   const sessionControlLabel = isMasterAccount ? "OMNI CONTROL" : "HIVE SESSION";
+  const getCollapsedControlWidth = () => window.innerWidth < 640 ? 40 : 170;
 
   function startPlayback() {
     updateIsMuted(true);
@@ -190,7 +192,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     const distanceY = event.clientY - drag.startY;
     if (Math.hypot(distanceX, distanceY) > 5) drag.moved = true;
     if (!drag.moved) return;
-    const controlWidth = isMasterPanelOpen ? Math.min(masterControlSize.width, window.innerWidth - 32) : 170;
+    const controlWidth = isMasterPanelOpen ? Math.min(masterControlSize.width, window.innerWidth - 32) : getCollapsedControlWidth();
     const nextPosition = { x: Math.min(window.innerWidth - controlWidth - 16, Math.max(0, drag.originX + distanceX)), y: Math.min(window.innerHeight - 44, Math.max(0, drag.originY + distanceY)) };
     masterControlPositionRef.current = nextPosition;
     setMasterControlPosition(nextPosition);
@@ -255,7 +257,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const keepControlInViewport = () => {
-      const controlWidth = isMasterPanelOpen ? Math.min(masterControlSize.width, window.innerWidth - 32) : 170;
+      const controlWidth = getCollapsedControlWidth();
       const nextPosition = {
         x: Math.max(0, Math.min(masterControlPositionRef.current.x, window.innerWidth - controlWidth - 16)),
         y: Math.max(0, Math.min(masterControlPositionRef.current.y, window.innerHeight - 44)),
@@ -310,6 +312,20 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    const hideMasterControl = () => {
+      setIsTutorialOpen(true);
+      setIsMasterPanelOpen(false);
+    };
+    const showMasterControl = () => setIsTutorialOpen(false);
+    window.addEventListener("bh-tutorial-open", hideMasterControl);
+    window.addEventListener("bh-tutorial-close", showMasterControl);
+    return () => {
+      window.removeEventListener("bh-tutorial-open", hideMasterControl);
+      window.removeEventListener("bh-tutorial-close", showMasterControl);
+    };
+  }, []);
+
+  useEffect(() => {
     try {
       const savedPosition = JSON.parse(window.localStorage.getItem("bh_masterControlPosition") || "null") as { x?: number; y?: number } | null;
       if (typeof savedPosition?.x === "number" && typeof savedPosition.y === "number") {
@@ -330,7 +346,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   return (
     <PlaybackContext.Provider value={{ nowPlaying, isPlaying, setNowPlaying, setIsPlaying: (playing) => playing ? startPlayback() : updateIsPlaying(false), refreshPlayback }}>
       {children}
-      {canControlSession && <div className="fixed z-50" style={{ left: masterControlPosition.x, top: masterControlPosition.y }}>
+      {canControlSession && !isTutorialOpen && <div className="fixed z-50" style={{ left: isMasterPanelOpen ? Math.max(0, Math.min(masterControlPosition.x, window.innerWidth - Math.min(masterControlSize.width, window.innerWidth - 32) - 16)) : masterControlPosition.x, top: masterControlPosition.y }}>
         {isMasterPanelOpen && <div className="relative mb-2 w-[calc(100vw-2rem)] max-w-[440px] rounded-lg border border-yellow-400/40 bg-[#17130b]/95 p-3 shadow-[0_0_36px_rgba(234,179,8,.2)] backdrop-blur" style={{ width: `min(${masterControlSize.width}px, calc(100vw - 2rem))` }}>
           <div onPointerDown={handleMasterPointerDown} onPointerMove={handleMasterPointerMove} onPointerUp={handleMasterPointerUp} className="mb-2 flex touch-none cursor-grab items-center justify-between gap-2 active:cursor-grabbing">
             <p className="truncate text-xs font-bold text-white">{nowPlaying?.title || "No song selected"}</p>
