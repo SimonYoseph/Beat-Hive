@@ -54,7 +54,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const [isMasterControlEnabled, setIsMasterControlEnabled] = useState(true);
   const [isMasterPanelOpen, setIsMasterPanelOpen] = useState(false);
   const [masterControlPosition, setMasterControlPosition] = useState({ x: 16, y: 16 });
-  const [masterControlSize, setMasterControlSize] = useState({ width: 158, height: 44 });
+  const [masterControlSize, setMasterControlSize] = useState({ width: 224, height: 154 });
   const playerRef = useRef<HTMLVideoElement>(null);
   const masterDragRef = useRef<{ startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(null);
   const masterDragCompletedRef = useRef(false);
@@ -166,8 +166,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   function handleMasterResizeMove(event: ReactPointerEvent<HTMLSpanElement>) {
     const resize = masterResizeRef.current;
     if (!resize) return;
-    const width = Math.min(window.innerWidth - masterControlPosition.x, Math.max(130, resize.width + event.clientX - resize.startX));
-    const height = Math.min(window.innerHeight - masterControlPosition.y, Math.max(44, resize.height + event.clientY - resize.startY));
+    const width = Math.min(window.innerWidth - masterControlPosition.x, Math.max(180, resize.width + event.clientX - resize.startX));
+    const height = Math.min(window.innerHeight - masterControlPosition.y, Math.max(120, resize.height + event.clientY - resize.startY));
     masterControlSizeRef.current = { width, height };
     setMasterControlSize({ width, height });
   }
@@ -192,7 +192,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     try {
       const savedSize = JSON.parse(window.localStorage.getItem("bh_masterControlSize") || "null") as { width?: number; height?: number } | null;
       if (typeof savedSize?.width === "number" && typeof savedSize.height === "number") {
-        const restoredSize = { width: savedSize.width, height: savedSize.height };
+        const restoredSize = { width: Math.max(180, savedSize.width), height: Math.max(120, savedSize.height) };
         masterControlSizeRef.current = restoredSize;
         setMasterControlSize(restoredSize);
       }
@@ -227,7 +227,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     <PlaybackContext.Provider value={{ nowPlaying, isPlaying, setNowPlaying, setIsPlaying: (playing) => playing ? startPlayback() : updateIsPlaying(false), refreshPlayback }}>
       {children}
       {isMasterAccount && <div className="fixed z-50" style={{ left: masterControlPosition.x, top: masterControlPosition.y }}>
-        {isMasterPanelOpen && <div className="mb-2 w-56 rounded-lg border border-white/15 bg-[#171717]/95 p-2 shadow-2xl backdrop-blur">
+        {isMasterPanelOpen && <div className="relative mb-2 overflow-auto rounded-lg border border-white/15 bg-[#171717]/95 p-2 shadow-2xl backdrop-blur" style={{ width: masterControlSize.width, height: masterControlSize.height }}>
           <div className="mb-2 flex items-center justify-between gap-2">
             <p className="truncate text-xs font-bold text-white">{nowPlaying?.title || "No song selected"}</p>
             <button onClick={() => setIsMasterPanelOpen(false)} aria-label="Close master control options" title="Close master control options" className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-white/10 hover:text-white">x</button>
@@ -242,11 +242,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
               <button onClick={playNextTrack} disabled={!nowPlaying} aria-label="Play next song" title="Play next song" className="flex h-11 items-center justify-center rounded-md bg-white/10 text-white transition-all hover:-translate-y-0.5 hover:bg-white/20 active:translate-y-0 disabled:opacity-40"><SkipForward size={19} fill="currentColor" /></button>
             </div>
           </>}
+          <span onPointerDown={handleMasterResizeStart} onPointerMove={handleMasterResizeMove} onPointerUp={handleMasterResizeEnd} aria-label="Resize master control panel" title="Drag to resize" className="absolute bottom-0 right-0 h-4 w-4 cursor-se-resize rounded-tl bg-white/30 hover:bg-white/60" />
         </div>}
-        {!isMasterPanelOpen && <div className="relative" style={{ width: masterControlSize.width, height: masterControlSize.height }}>
-          <button onPointerDown={handleMasterPointerDown} onPointerMove={handleMasterPointerMove} onPointerUp={handleMasterPointerUp} onClick={(event) => { if (masterDragCompletedRef.current) { event.preventDefault(); masterDragCompletedRef.current = false; return; } setIsMasterPanelOpen(true); }} aria-label="Master control options" title="Master control options" aria-expanded={false} className="flex h-full w-full touch-none cursor-grab items-center justify-center rounded-lg border border-red-400/70 bg-red-600 px-4 text-xs font-black tracking-wide text-white shadow-xl transition-all hover:-translate-y-0.5 hover:bg-red-500 active:translate-y-0 active:cursor-grabbing">MASTER CONTROL</button>
-          <span onPointerDown={handleMasterResizeStart} onPointerMove={handleMasterResizeMove} onPointerUp={handleMasterResizeEnd} aria-label="Resize master control" title="Drag to resize" className="absolute bottom-0 right-0 z-10 h-4 w-4 cursor-se-resize rounded-tl bg-white/30 hover:bg-white/60" />
-        </div>}
+        {!isMasterPanelOpen && <button onPointerDown={handleMasterPointerDown} onPointerMove={handleMasterPointerMove} onPointerUp={handleMasterPointerUp} onClick={(event) => { if (masterDragCompletedRef.current) { event.preventDefault(); masterDragCompletedRef.current = false; return; } setIsMasterPanelOpen(true); }} aria-label="Master control options" title="Master control options" aria-expanded={false} className="flex h-11 touch-none cursor-grab items-center justify-center rounded-lg border border-red-400/70 bg-red-600 px-4 text-xs font-black tracking-wide text-white shadow-xl transition-all hover:-translate-y-0.5 hover:bg-red-500 active:translate-y-0 active:cursor-grabbing">MASTER CONTROL</button>}
       </div>}
       {nowPlaying?.videoId && (
         <>
