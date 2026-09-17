@@ -100,6 +100,12 @@ function HiveQueueDropZone({ children }: { children: React.ReactNode }) {
   return <div ref={setNodeRef} className={`rounded-lg transition-colors ${isOver ? "bg-yellow-500/10" : ""}`}>{children}</div>;
 }
 
+function PersonalQueueDropZone({ children }: { children: React.ReactNode }) {
+  const { isOver, setNodeRef } = useDroppable({ id: "personal-queue" });
+
+  return <div ref={setNodeRef} className={`rounded-lg transition-colors ${isOver ? "bg-yellow-500/10" : ""}`}>{children}</div>;
+}
+
 function DragTrackOverlay({ track }: { track: RequestedTrack }) {
   return <div className="flex w-72 items-center gap-3 rounded-lg border border-yellow-500/60 bg-[#202020] p-3 text-white shadow-2xl"><Menu size={18} className="text-yellow-500" /><div className="min-w-0"><p className="truncate font-bold">{track.title}</p><p className="truncate text-sm text-gray-400">{track.channelTitle}</p></div></div>;
 }
@@ -122,13 +128,19 @@ export default function YoutubePage() {
   const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
   const [isHost, setIsHost] = useState(false);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
-  const isMasterAccount = session?.user?.email?.toLowerCase() === MASTER_CONTROL_EMAIL;
+  const [isMasterControlEnabled, setIsMasterControlEnabled] = useState(true);
+  const isMasterAccount = session?.user?.email?.toLowerCase() === MASTER_CONTROL_EMAIL && isMasterControlEnabled;
   const canManageQueue = isMasterAccount || isHost;
   const searchFormRef = useRef<HTMLFormElement>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   useEffect(() => {
     setIsHost(window.localStorage.getItem("bh_userRole") === '"dj"');
+    try {
+      setIsMasterControlEnabled(JSON.parse(window.localStorage.getItem("bh_masterControlEnabled") || "true") as boolean);
+    } catch {
+      setIsMasterControlEnabled(true);
+    }
   }, []);
 
   useEffect(() => {
@@ -322,6 +334,22 @@ export default function YoutubePage() {
       return;
     }
 
+    const hiveIndex = playQueue.findIndex((track) => track.videoId === active.id);
+    if (isMasterAccount && hiveIndex >= 0) {
+      const targetRequestIndex = over.id === "personal-queue" ? requestTracks.length : requestTracks.findIndex((track) => `request-${track.videoId}` === over.id);
+      if (targetRequestIndex < 0) return;
+
+      const hiveTrack = playQueue[hiveIndex];
+      const nextPlayQueue = playQueue.filter((_, index) => index !== hiveIndex);
+      const nextRequests = [...requestTracks];
+      if (!nextRequests.some((track) => track.videoId === hiveTrack.videoId)) nextRequests.splice(targetRequestIndex, 0, hiveTrack);
+      setPlayQueue(nextPlayQueue);
+      setRequestTracks(nextRequests);
+      window.localStorage.setItem("bh_play_queue", JSON.stringify(nextPlayQueue));
+      window.localStorage.setItem("bh_youtube_requests", JSON.stringify(nextRequests));
+      return;
+    }
+
     if (!canManageQueue) return;
 
     const activeTrackIndex = playQueue.findIndex((track) => track.videoId === nowPlayingId);
@@ -461,7 +489,7 @@ export default function YoutubePage() {
             <DndContext sensors={sensors} onDragStart={handleQueueDragStart} onDragCancel={() => setActiveDragId(null)} onDragEnd={(event) => { setActiveDragId(null); handleQueueDragEnd(event); }}><div className="grid gap-6 md:grid-cols-2">
               <section>
                 <div className="relative mb-2 text-center"><h3 className="font-bold">Your queue</h3><span className="absolute right-0 top-0 text-sm text-gray-500">{requestTracks.length}</span></div>
-                {requestTracks.length === 0 ? <p className="text-sm text-gray-500">Songs you request will appear here.</p> : <SortableContext items={requestTracks.map((track) => `request-${track.videoId}`)} strategy={verticalListSortingStrategy}><div className="space-y-2">{requestTracks.map((track) => <RequestTrackItem key={track.videoId} track={track} onRemove={removeRequest} />)}</div></SortableContext>}
+                <PersonalQueueDropZone>{requestTracks.length === 0 ? <p className="p-3 text-sm text-gray-500">Songs you request will appear here.</p> : <SortableContext items={requestTracks.map((track) => `request-${track.videoId}`)} strategy={verticalListSortingStrategy}><div className="space-y-2">{requestTracks.map((track) => <RequestTrackItem key={track.videoId} track={track} onRemove={removeRequest} />)}</div></SortableContext>}</PersonalQueueDropZone>
               </section>
               <section>
                 <div className="relative mb-2 text-center"><h3 className="font-bold">Hive Queue</h3><span className="absolute right-0 top-0 text-sm text-gray-500">{playQueue.length}</span></div>

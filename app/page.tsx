@@ -282,6 +282,7 @@ export default function BeatHiveApp() {
   // DJ State
   const [djRoomActive, setDjRoomActive] = usePersistedState('bh_djRoomActive', false);
   const [isPartyCreator, setIsPartyCreator] = usePersistedState('bh_isPartyCreator', false);
+  const [isMasterControlEnabled, setIsMasterControlEnabled] = usePersistedState('bh_masterControlEnabled', true);
   const [isAnonymousDJ, setIsAnonymousDJ] = usePersistedState('bh_isAnonymousDJ', false);
   const [energyPreference, setEnergyPreference] = usePersistedState<'up' | 'down' | null>('bh_energyPreference', null);
   const [selectedVibe, setSelectedVibe] = usePersistedState<string | null>('bh_selectedVibe', null);
@@ -672,6 +673,7 @@ export default function BeatHiveApp() {
   }
 
   const isMasterAccount = userEmail?.toLowerCase() === MASTER_CONTROL_EMAIL;
+  const isMasterController = isMasterAccount && isMasterControlEnabled;
 
   // State 3A: DJ Mode (Room Setup & Dashboard)
   if (userRole === 'dj') {
@@ -833,7 +835,7 @@ export default function BeatHiveApp() {
   }
 
   // State 3B: Guest flow - scan QR
-  if (userRole === 'guest' && !hasAccess && !isMasterAccount) {
+  if (userRole === 'guest' && !hasAccess && !isMasterController) {
     return (
       <main className="min-h-[100dvh] flex flex-col items-center justify-center p-6 text-center bg-[#111]">
         <div className="max-w-md w-full flex flex-col items-center space-y-8 bg-[#1a1a1a] p-8 rounded-3xl shadow-2xl border border-yellow-500/20 relative">
@@ -912,8 +914,7 @@ export default function BeatHiveApp() {
     );
   }
 
-  const isMasterController = isMasterAccount;
-  const canManageRoom = isMasterAccount || isPartyCreator;
+  const canManageRoom = isMasterController || (!isMasterAccount && isPartyCreator);
 
   const hasPreviousTrack = (() => {
     try {
@@ -1150,6 +1151,13 @@ export default function BeatHiveApp() {
                     </button>
                   )}
                 </div>
+                {isMasterAccount && <div>
+                  <h3 className="mb-3 text-sm font-bold uppercase tracking-widest text-gray-400">Master Control</h3>
+                  <button onClick={() => setIsMasterControlEnabled((enabled) => !enabled)} role="switch" aria-checked={isMasterControlEnabled} className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-[#111] p-4 text-left transition-colors hover:border-yellow-500/50">
+                    <span className="text-sm font-bold text-white">Master control</span>
+                    <span className={`relative h-6 w-11 rounded-full transition-colors ${isMasterControlEnabled ? 'bg-yellow-500' : 'bg-gray-700'}`}><span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-transform ${isMasterControlEnabled ? 'left-6' : 'left-1'}`} /></span>
+                  </button>
+                </div>}
                 {canManageRoom && <div>
                   <h3 className="mb-3 text-sm font-bold uppercase tracking-widest text-gray-400">View As</h3>
                   <div className="grid grid-cols-2 rounded-xl border border-white/10 bg-[#111] p-1">
