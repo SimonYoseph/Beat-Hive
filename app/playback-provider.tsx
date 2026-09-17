@@ -357,7 +357,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         </div>}
         {!isMasterPanelOpen && <button onPointerDown={handleMasterPointerDown} onPointerMove={handleMasterPointerMove} onPointerUp={handleMasterPointerUp} onClick={(event) => { if (masterDragCompletedRef.current) { event.preventDefault(); masterDragCompletedRef.current = false; return; } setIsMasterPanelOpen(true); }} aria-label={`${sessionControlLabel} options`} title={`${sessionControlLabel} options`} aria-expanded={false} className="flex h-10 w-10 touch-none cursor-grab items-center justify-center rounded-full border border-yellow-300/70 bg-yellow-500 px-0 text-xs font-black tracking-wide text-[#17130b] shadow-[0_0_20px_rgba(234,179,8,.3)] transition-all hover:-translate-y-0.5 hover:bg-yellow-400 active:translate-y-0 active:cursor-grabbing sm:h-11 sm:w-auto sm:rounded-lg sm:px-4"><span className="sm:hidden">{isMasterAccount ? "OC" : "HS"}</span><span className="hidden sm:inline">{sessionControlLabel}</span></button>}
       </div>}
-      {nowPlaying?.videoId && (
+      {nowPlaying?.videoId && isPlaying && (
         <>
           <div aria-hidden={isVideoHidden} className={`fixed bottom-4 right-4 z-50 h-[90px] w-[160px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-white/20 bg-black shadow-2xl transition-all sm:h-[180px] sm:w-[320px] ${isVideoHidden ? "pointer-events-none translate-x-[calc(100%+1rem)] opacity-0" : ""}`}>
             <ReactPlayer
