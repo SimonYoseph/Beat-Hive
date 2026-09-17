@@ -304,6 +304,7 @@ export default function BeatHiveApp() {
   const [joinedRoom] = usePersistedState<{ code: string; hostName: string; hostEmail: string; roomName: string } | null>('bh_joinedRoom', null);
   const [shareStatus, setShareStatus] = useState('');
   const [newRequestCount, setNewRequestCount] = useState(0);
+  const [viewedRequestIds, setViewedRequestIds] = usePersistedState<string[]>('bh_viewedRequestIds', []);
   const hasSeededActiveSession = useRef(false);
 
   // Guest State
@@ -331,8 +332,8 @@ export default function BeatHiveApp() {
   useEffect(() => {
     const loadRequestCount = () => {
       try {
-        const requests = JSON.parse(window.localStorage.getItem('bh_youtube_requests') || '[]') as unknown[];
-        setNewRequestCount(requests.length);
+        const requests = JSON.parse(window.localStorage.getItem('bh_youtube_requests') || '[]') as Array<{ videoId?: string }>;
+        setNewRequestCount(requests.filter((request) => request.videoId && !viewedRequestIds.includes(request.videoId)).length);
       } catch {
         setNewRequestCount(0);
       }
@@ -344,7 +345,16 @@ export default function BeatHiveApp() {
       window.removeEventListener('storage', loadRequestCount);
       window.removeEventListener('bh-playback-change', loadRequestCount);
     };
-  }, []);
+  }, [viewedRequestIds]);
+
+  const acknowledgeRequests = () => {
+    try {
+      const requests = JSON.parse(window.localStorage.getItem('bh_youtube_requests') || '[]') as Array<{ videoId?: string }>;
+      setViewedRequestIds(requests.flatMap((request) => request.videoId ? [request.videoId] : []));
+    } catch {
+      setViewedRequestIds([]);
+    }
+  };
 
   useEffect(() => {
     if (userRole !== 'dj' || !djRoomActive || hasSeededActiveSession.current) return;
@@ -901,7 +911,7 @@ export default function BeatHiveApp() {
           </div>
 
           <div className="grid grid-cols-2 gap-4 flex-1">
-             <NextLink href="/youtube" className="bg-[#1a1a1a] rounded-2xl p-4 border border-white/5 flex flex-col transition-colors hover:border-yellow-500/50">
+             <NextLink href="/youtube" onClick={acknowledgeRequests} className="bg-[#1a1a1a] rounded-2xl p-4 border border-white/5 flex flex-col transition-colors hover:border-yellow-500/50">
                 <Search className="text-yellow-500 mb-2" size={24} />
                <span className="text-3xl font-black text-white">{newRequestCount}</span>
                 <span className="text-sm text-gray-400 font-medium">New Requests</span>
