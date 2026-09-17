@@ -72,6 +72,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const masterDragCompletedRef = useRef(false);
   const masterResizeRef = useRef<{ startX: number; startY: number; width: number; height: number } | null>(null);
   const masterControlSizeRef = useRef(masterControlSize);
+  const masterControlPositionRef = useRef(masterControlPosition);
   const isMasterAccount = session?.user?.email?.toLowerCase() === MASTER_CONTROL_EMAIL;
 
   function startPlayback() {
@@ -173,25 +174,27 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     stopAudio();
   }
 
-  function handleMasterPointerDown(event: ReactPointerEvent<HTMLButtonElement>) {
+  function handleMasterPointerDown(event: ReactPointerEvent<HTMLElement>) {
     event.currentTarget.setPointerCapture(event.pointerId);
     masterDragRef.current = { startX: event.clientX, startY: event.clientY, originX: masterControlPosition.x, originY: masterControlPosition.y, moved: false };
   }
 
-  function handleMasterPointerMove(event: ReactPointerEvent<HTMLButtonElement>) {
+  function handleMasterPointerMove(event: ReactPointerEvent<HTMLElement>) {
     const drag = masterDragRef.current;
     if (!drag) return;
     const distanceX = event.clientX - drag.startX;
     const distanceY = event.clientY - drag.startY;
     if (Math.hypot(distanceX, distanceY) > 5) drag.moved = true;
     if (!drag.moved) return;
-    setMasterControlPosition({ x: Math.min(window.innerWidth - 170, Math.max(0, drag.originX + distanceX)), y: Math.min(window.innerHeight - 44, Math.max(0, drag.originY + distanceY)) });
+    const nextPosition = { x: Math.min(window.innerWidth - 170, Math.max(0, drag.originX + distanceX)), y: Math.min(window.innerHeight - 44, Math.max(0, drag.originY + distanceY)) };
+    masterControlPositionRef.current = nextPosition;
+    setMasterControlPosition(nextPosition);
   }
 
   function handleMasterPointerUp() {
     masterDragCompletedRef.current = Boolean(masterDragRef.current?.moved);
     if (masterDragCompletedRef.current) {
-      window.localStorage.setItem("bh_masterControlPosition", JSON.stringify(masterControlPosition));
+      window.localStorage.setItem("bh_masterControlPosition", JSON.stringify(masterControlPositionRef.current));
     }
     masterDragRef.current = null;
   }
@@ -271,7 +274,11 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       const savedPosition = JSON.parse(window.localStorage.getItem("bh_masterControlPosition") || "null") as { x?: number; y?: number } | null;
-      if (typeof savedPosition?.x === "number" && typeof savedPosition.y === "number") setMasterControlPosition({ x: savedPosition.x, y: savedPosition.y });
+      if (typeof savedPosition?.x === "number" && typeof savedPosition.y === "number") {
+        const restoredPosition = { x: savedPosition.x, y: savedPosition.y };
+        masterControlPositionRef.current = restoredPosition;
+        setMasterControlPosition(restoredPosition);
+      }
     } catch {
       // Use the default position when the saved value cannot be read.
     }
@@ -287,9 +294,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       {children}
       {isMasterAccount && <div className="fixed z-50" style={{ left: masterControlPosition.x, top: masterControlPosition.y }}>
         {isMasterPanelOpen && <div className="relative mb-2 w-[calc(100vw-2rem)] max-w-[440px] rounded-lg border border-yellow-400/40 bg-[#17130b]/95 p-3 shadow-[0_0_36px_rgba(234,179,8,.2)] backdrop-blur" style={{ width: `min(${masterControlSize.width}px, calc(100vw - 2rem))` }}>
-          <div className="mb-2 flex items-center justify-between gap-2">
+          <div onPointerDown={handleMasterPointerDown} onPointerMove={handleMasterPointerMove} onPointerUp={handleMasterPointerUp} className="mb-2 flex touch-none cursor-grab items-center justify-between gap-2 active:cursor-grabbing">
             <p className="truncate text-xs font-bold text-white">{nowPlaying?.title || "No song selected"}</p>
-            <button onClick={() => setIsMasterPanelOpen(false)} aria-label="Close Omni Control" title="Close Omni Control" className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-white/10 hover:text-white">x</button>
+            <button onPointerDown={(event) => event.stopPropagation()} onClick={() => setIsMasterPanelOpen(false)} aria-label="Close Omni Control" title="Close Omni Control" className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-white/10 hover:text-white">x</button>
           </div>
           <button onClick={toggleMasterControl} role="switch" aria-checked={isMasterControlEnabled} title={isMasterControlEnabled ? "Switch to Hive User control" : "Switch to Omni Control"} className={`flex h-9 w-full items-center justify-between rounded px-3 text-xs font-bold transition-colors ${isMasterControlEnabled ? "bg-yellow-400 text-[#17130b]" : "bg-white/10 text-white"}`}>
             <span>Hive User Mode</span><span className={`h-3 w-3 rounded-full ${isMasterControlEnabled ? "bg-black" : "bg-gray-500"}`} />
