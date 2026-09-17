@@ -840,7 +840,7 @@ export default function BeatHiveApp() {
                       <p className="mb-3 text-center text-xs font-medium text-gray-500">Scan to join {roomName}</p>
                       <div className="w-full flex items-center justify-between gap-2 bg-gray-50 rounded-xl p-3 border border-gray-200 shadow-sm">
                         <span className="min-w-0 truncate font-mono text-gray-600 font-bold tracking-widest text-sm">{roomCode}</span>
-                        <div className="flex shrink-0 gap-1"><button onClick={() => void copyRoomLink()} aria-label="Copy room link" title="Copy room link" className="flex h-8 w-8 items-center justify-center rounded text-gray-500 hover:bg-gray-200 hover:text-black"><Copy size={17} /></button><button onClick={() => void shareRoomLink()} aria-label="Share room link" title="Share room link" className="flex h-8 w-8 items-center justify-center rounded text-gray-500 hover:bg-gray-200 hover:text-black"><Share2 size={17} /></button></div>
+                        <div className="flex shrink-0 gap-2"><button onClick={() => void copyRoomLink()} title="Copy room link" className="flex h-8 items-center justify-center gap-1 rounded bg-gray-200 px-2 text-xs font-bold text-gray-700 hover:bg-gray-300"><Copy size={14} />Copy Link</button><button onClick={() => void shareRoomLink()} title="Share room invite" className="flex h-8 items-center justify-center gap-1 rounded bg-yellow-500 px-2 text-xs font-bold text-black hover:bg-yellow-400"><Share2 size={14} />Share Invite</button></div>
                       </div>
                       {shareStatus && <p className="mt-2 text-xs font-bold text-yellow-700" role="status">{shareStatus}</p>}
                     </div>
