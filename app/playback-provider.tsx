@@ -1,7 +1,7 @@
 "use client";
 
 import ReactPlayer from "react-player";
-import { createContext, ReactNode, useContext, useEffect, useState } from "react";
+import { createContext, ReactNode, useContext, useEffect, useRef, useState } from "react";
 
 type NowPlayingTrack = {
   videoId?: string;
@@ -44,12 +44,19 @@ function recordPlayedTrack(track: NowPlayingTrack) {
 export function PlaybackProvider({ children }: { children: ReactNode }) {
   const [nowPlaying, updateNowPlaying] = useState<NowPlayingTrack | null>(null);
   const [isPlaying, updateIsPlaying] = useState(false);
+  const [isMuted, updateIsMuted] = useState(false);
+  const playerRef = useRef<HTMLVideoElement>(null);
+
+  function startPlayback() {
+    updateIsMuted(true);
+    updateIsPlaying(true);
+  }
 
   function refreshPlayback() {
     updateNowPlaying(readNowPlaying());
     if (window.localStorage.getItem("bh_queue_autoplay") === "true") {
       window.localStorage.removeItem("bh_queue_autoplay");
-      updateIsPlaying(true);
+      startPlayback();
     }
   }
 
@@ -69,7 +76,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       const nextTrack = nextQueue[currentIndex] || nextQueue[0] || null;
       window.localStorage.setItem("bh_play_queue", JSON.stringify(nextQueue));
       setNowPlaying(nextTrack);
-      updateIsPlaying(nextTrack !== null);
+      if (nextTrack) startPlayback();
+      else updateIsPlaying(false);
       window.dispatchEvent(new Event("bh-playback-change"));
     } catch {
       updateIsPlaying(false);
@@ -87,15 +95,23 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  useEffect(() => {
+    if (!nowPlaying?.videoId || !isPlaying) return;
+    void playerRef.current?.play().catch(() => updateIsPlaying(false));
+  }, [isPlaying, nowPlaying?.videoId]);
+
   return (
-    <PlaybackContext.Provider value={{ nowPlaying, isPlaying, setNowPlaying, setIsPlaying: updateIsPlaying, refreshPlayback }}>
+    <PlaybackContext.Provider value={{ nowPlaying, isPlaying, setNowPlaying, setIsPlaying: (playing) => playing ? startPlayback() : updateIsPlaying(false), refreshPlayback }}>
       {children}
       {nowPlaying?.videoId && (
-        <div className="fixed -left-[9999px] h-[180px] w-[320px] overflow-hidden" aria-hidden="true">
+        <div className="fixed bottom-4 right-4 z-50 h-[180px] w-[320px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-white/20 bg-black shadow-2xl">
           <ReactPlayer
+            ref={playerRef}
             src={`https://www.youtube.com/watch?v=${nowPlaying.videoId}`}
             playing={isPlaying}
-            controls={false}
+            muted={isMuted}
+            volume={1}
+            controls
             playsInline
             width="100%"
             height="100%"
@@ -103,6 +119,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
               updateIsPlaying(true);
               recordPlayedTrack(nowPlaying);
             }}
+            onPlaying={() => updateIsMuted(false)}
             onPause={() => updateIsPlaying(false)}
             onEnded={handleTrackEnded}
           />
