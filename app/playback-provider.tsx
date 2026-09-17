@@ -2,6 +2,7 @@
 
 import ReactPlayer from "react-player";
 import { createContext, ReactNode, useContext, useEffect, useRef, useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
 
 type NowPlayingTrack = {
   videoId?: string;
@@ -45,6 +46,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const [nowPlaying, updateNowPlaying] = useState<NowPlayingTrack | null>(null);
   const [isPlaying, updateIsPlaying] = useState(false);
   const [isMuted, updateIsMuted] = useState(false);
+  const [isVideoHidden, setIsVideoHidden] = useState(false);
   const playerRef = useRef<HTMLVideoElement>(null);
 
   function startPlayback() {
@@ -104,26 +106,35 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     <PlaybackContext.Provider value={{ nowPlaying, isPlaying, setNowPlaying, setIsPlaying: (playing) => playing ? startPlayback() : updateIsPlaying(false), refreshPlayback }}>
       {children}
       {nowPlaying?.videoId && (
-        <div className="fixed bottom-4 right-4 z-50 h-[180px] w-[320px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-white/20 bg-black shadow-2xl">
-          <ReactPlayer
-            ref={playerRef}
-            src={`https://www.youtube.com/watch?v=${nowPlaying.videoId}`}
-            playing={isPlaying}
-            muted={isMuted}
-            volume={1}
-            controls
-            playsInline
-            width="100%"
-            height="100%"
-            onPlay={() => {
-              updateIsPlaying(true);
-              recordPlayedTrack(nowPlaying);
-            }}
-            onPlaying={() => updateIsMuted(false)}
-            onPause={() => updateIsPlaying(false)}
-            onEnded={handleTrackEnded}
-          />
-        </div>
+        isVideoHidden ? (
+          <button onClick={() => setIsVideoHidden(false)} aria-label="Show video player" title="Show video player" className="fixed bottom-4 right-4 z-50 flex h-11 w-11 items-center justify-center rounded-lg border border-white/20 bg-black/85 text-white shadow-xl backdrop-blur hover:border-yellow-500 hover:text-yellow-500">
+            <Eye size={19} />
+          </button>
+        ) : (
+          <div className="fixed bottom-4 right-4 z-50 h-[180px] w-[320px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-white/20 bg-black shadow-2xl">
+            <button onClick={() => setIsVideoHidden(true)} aria-label="Hide video player" title="Hide video player" className="absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded bg-black/70 text-white hover:bg-black hover:text-yellow-500">
+              <EyeOff size={16} />
+            </button>
+            <ReactPlayer
+              ref={playerRef}
+              src={`https://www.youtube.com/watch?v=${nowPlaying.videoId}`}
+              playing={isPlaying}
+              muted={isMuted}
+              volume={1}
+              controls
+              playsInline
+              width="100%"
+              height="100%"
+              onPlay={() => {
+                updateIsPlaying(true);
+                recordPlayedTrack(nowPlaying);
+              }}
+              onPlaying={() => updateIsMuted(false)}
+              onPause={() => updateIsPlaying(false)}
+              onEnded={handleTrackEnded}
+            />
+          </div>
+        )
       )}
     </PlaybackContext.Provider>
   );
