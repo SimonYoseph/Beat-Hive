@@ -355,6 +355,13 @@ export default function YoutubePage() {
       setRequestTracks(nextRequests);
       window.localStorage.setItem("bh_play_queue", JSON.stringify(nextPlayQueue));
       window.localStorage.setItem("bh_youtube_requests", JSON.stringify(nextRequests));
+      if (hiveTrack.videoId === nowPlayingId) {
+        const nextPlayingTrack = nextPlayQueue[hiveIndex] || nextPlayQueue[0] || null;
+        setNowPlaying(nextPlayingTrack);
+        setNowPlayingId(nextPlayingTrack?.videoId || null);
+        setIsPlaying(nextPlayingTrack !== null);
+      }
+      window.dispatchEvent(new Event("bh-playback-change"));
       return;
     }
 
@@ -453,7 +460,7 @@ export default function YoutubePage() {
 
   const activeTrackIndex = playQueue.findIndex((track) => track.videoId === nowPlayingId);
   const firstMovableIndex = activeTrackIndex >= 0 ? activeTrackIndex + 1 : 0;
-  const movableTrackIds = playQueue.slice(firstMovableIndex).map((track) => track.videoId);
+  const movableTrackIds = (isMasterAccount ? playQueue : playQueue.slice(firstMovableIndex)).map((track) => track.videoId);
   const activeDragTrack = activeDragId?.startsWith("request-")
     ? requestTracks.find((track) => `request-${track.videoId}` === activeDragId)
     : playQueue.find((track) => track.videoId === activeDragId);
@@ -501,7 +508,7 @@ export default function YoutubePage() {
               </section>
               <section>
                 <div className="relative mb-2 text-center"><h3 className="font-bold">Hive Queue</h3><span className="absolute right-0 top-0 text-sm text-gray-500">{playQueue.length}</span></div>
-                <HiveQueueDropZone>{playQueue.length === 0 ? <p className="p-3 text-sm text-gray-500">Upvoted requests will play here.</p> : <SortableContext items={movableTrackIds} strategy={verticalListSortingStrategy}><div className="space-y-2">{playQueue.map((track, index) => <QueueTrackItem key={track.videoId} track={track} index={index} isPlaying={track.videoId === nowPlayingId} canReorder={canManageQueue && index >= firstMovableIndex} canRemove={canManageQueue} showUpvoteCount={canManageQueue} onRemove={removeTrack} onUpvote={upvoteHiveTrack} />)}</div></SortableContext>}</HiveQueueDropZone>
+                <HiveQueueDropZone>{playQueue.length === 0 ? <p className="p-3 text-sm text-gray-500">Upvoted requests will play here.</p> : <SortableContext items={movableTrackIds} strategy={verticalListSortingStrategy}><div className="space-y-2">{playQueue.map((track, index) => <QueueTrackItem key={track.videoId} track={track} index={index} isPlaying={track.videoId === nowPlayingId} canReorder={canManageQueue && (isMasterAccount || index >= firstMovableIndex)} canRemove={canManageQueue} showUpvoteCount={canManageQueue} onRemove={removeTrack} onUpvote={upvoteHiveTrack} />)}</div></SortableContext>}</HiveQueueDropZone>
               </section>
             </div><DragOverlay dropAnimation={null}>{isMasterAccount && activeDragTrack && <DragTrackOverlay track={activeDragTrack} />}</DragOverlay></DndContext>
           )}
