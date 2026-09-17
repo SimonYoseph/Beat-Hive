@@ -302,6 +302,18 @@ export default function BeatHiveApp() {
   }, [setViewMode]);
 
   useEffect(() => {
+    const syncMasterControl = () => {
+      try {
+        setIsMasterControlEnabled(JSON.parse(window.localStorage.getItem('bh_masterControlEnabled') || 'true') as boolean);
+      } catch {
+        setIsMasterControlEnabled(true);
+      }
+    };
+    window.addEventListener('bh-master-control-change', syncMasterControl);
+    return () => window.removeEventListener('bh-master-control-change', syncMasterControl);
+  }, [setIsMasterControlEnabled]);
+
+  useEffect(() => {
     let isCurrent = true;
 
     async function loadRemoteSettings() {

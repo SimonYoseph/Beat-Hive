@@ -136,11 +136,19 @@ export default function YoutubePage() {
 
   useEffect(() => {
     setIsHost(window.localStorage.getItem("bh_userRole") === '"dj"');
-    try {
-      setIsMasterControlEnabled(JSON.parse(window.localStorage.getItem("bh_masterControlEnabled") || "true") as boolean);
-    } catch {
-      setIsMasterControlEnabled(true);
-    }
+  }, []);
+
+  useEffect(() => {
+    const syncMasterControl = () => {
+      try {
+        setIsMasterControlEnabled(JSON.parse(window.localStorage.getItem("bh_masterControlEnabled") || "true") as boolean);
+      } catch {
+        setIsMasterControlEnabled(true);
+      }
+    };
+    syncMasterControl();
+    window.addEventListener("bh-master-control-change", syncMasterControl);
+    return () => window.removeEventListener("bh-master-control-change", syncMasterControl);
   }, []);
 
   useEffect(() => {

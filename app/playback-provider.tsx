@@ -2,7 +2,10 @@
 
 import ReactPlayer from "react-player";
 import { createContext, ReactNode, useContext, useEffect, useRef, useState } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Pause, Play, Settings2, SkipBack, SkipForward } from "lucide-react";
+import { useSession } from "next-auth/react";
+
+const MASTER_CONTROL_EMAIL = "simon97862012@gmail.com";
 
 type NowPlayingTrack = {
   videoId?: string;
@@ -43,11 +46,15 @@ function recordPlayedTrack(track: NowPlayingTrack) {
 }
 
 export function PlaybackProvider({ children }: { children: ReactNode }) {
+  const { data: session } = useSession();
   const [nowPlaying, updateNowPlaying] = useState<NowPlayingTrack | null>(null);
   const [isPlaying, updateIsPlaying] = useState(false);
   const [isMuted, updateIsMuted] = useState(false);
   const [isVideoHidden, setIsVideoHidden] = useState(false);
+  const [isMasterControlEnabled, setIsMasterControlEnabled] = useState(true);
+  const [isMasterPanelOpen, setIsMasterPanelOpen] = useState(false);
   const playerRef = useRef<HTMLVideoElement>(null);
+  const isMasterAccount = session?.user?.email?.toLowerCase() === MASTER_CONTROL_EMAIL;
 
   function startPlayback() {
     updateIsMuted(true);
@@ -86,6 +93,40 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  function playPreviousTrack() {
+    try {
+      const history = JSON.parse(window.localStorage.getItem("bh_play_history") || "[]") as NowPlayingTrack[];
+      const previousTrack = history.filter((track) => track.videoId !== nowPlaying?.videoId).at(-1);
+      if (!previousTrack) return;
+      setNowPlaying(previousTrack);
+      startPlayback();
+      window.dispatchEvent(new Event("bh-playback-change"));
+    } catch {
+      // Keep the current track active if playback history cannot be read.
+    }
+  }
+
+  function playNextTrack() {
+    try {
+      const queue = JSON.parse(window.localStorage.getItem("bh_play_queue") || "[]") as NowPlayingTrack[];
+      const currentIndex = queue.findIndex((track) => track.videoId === nowPlaying?.videoId);
+      const nextTrack = queue[currentIndex + 1];
+      if (!nextTrack) return;
+      setNowPlaying(nextTrack);
+      startPlayback();
+      window.dispatchEvent(new Event("bh-playback-change"));
+    } catch {
+      // Keep the current track active if the queue cannot be read.
+    }
+  }
+
+  function toggleMasterControl() {
+    const nextValue = !isMasterControlEnabled;
+    setIsMasterControlEnabled(nextValue);
+    window.localStorage.setItem("bh_masterControlEnabled", JSON.stringify(nextValue));
+    window.dispatchEvent(new Event("bh-master-control-change"));
+  }
+
   useEffect(() => {
     refreshPlayback();
     const handlePlaybackChange = () => refreshPlayback();
@@ -98,6 +139,14 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    try {
+      setIsMasterControlEnabled(JSON.parse(window.localStorage.getItem("bh_masterControlEnabled") || "true") as boolean);
+    } catch {
+      setIsMasterControlEnabled(true);
+    }
+  }, []);
+
+  useEffect(() => {
     if (!nowPlaying?.videoId || !isPlaying) return;
     void playerRef.current?.play().catch(() => updateIsPlaying(false));
   }, [isPlaying, nowPlaying?.videoId]);
@@ -105,6 +154,19 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   return (
     <PlaybackContext.Provider value={{ nowPlaying, isPlaying, setNowPlaying, setIsPlaying: (playing) => playing ? startPlayback() : updateIsPlaying(false), refreshPlayback }}>
       {children}
+      {isMasterAccount && <div className="fixed bottom-4 left-4 z-50">
+        {isMasterPanelOpen && <div className="mb-2 flex items-center gap-1 rounded-lg border border-white/15 bg-[#171717]/95 p-2 shadow-2xl backdrop-blur">
+          <button onClick={toggleMasterControl} role="switch" aria-checked={isMasterControlEnabled} title={isMasterControlEnabled ? "Switch to Hive User control" : "Switch to Master Control"} className={`flex h-9 items-center gap-2 rounded px-2 text-xs font-bold transition-colors ${isMasterControlEnabled ? "bg-yellow-500 text-black" : "bg-white/10 text-white"}`}>
+            {isMasterControlEnabled ? "Master Control" : "Hive User"}
+          </button>
+          {isMasterControlEnabled && <>
+            <button onClick={playPreviousTrack} disabled={!nowPlaying} aria-label="Play previous song" title="Play previous song" className="flex h-9 w-9 items-center justify-center rounded bg-white/10 text-white hover:bg-yellow-500 hover:text-black disabled:opacity-40"><SkipBack size={17} fill="currentColor" /></button>
+            <button onClick={() => isPlaying ? updateIsPlaying(false) : startPlayback()} disabled={!nowPlaying} aria-label={isPlaying ? "Pause song" : "Play song"} title={isPlaying ? "Pause song" : "Play song"} className="flex h-9 w-9 items-center justify-center rounded bg-white/10 text-white hover:bg-yellow-500 hover:text-black disabled:opacity-40">{isPlaying ? <Pause size={17} fill="currentColor" /> : <Play size={17} fill="currentColor" />}</button>
+            <button onClick={playNextTrack} disabled={!nowPlaying} aria-label="Play next song" title="Play next song" className="flex h-9 w-9 items-center justify-center rounded bg-white/10 text-white hover:bg-yellow-500 hover:text-black disabled:opacity-40"><SkipForward size={17} fill="currentColor" /></button>
+          </>}
+        </div>}
+        <button onClick={() => setIsMasterPanelOpen((open) => !open)} aria-label="Master control options" title="Master control options" className={`flex h-11 w-11 items-center justify-center rounded-lg border shadow-xl transition-colors ${isMasterControlEnabled ? "border-yellow-500/50 bg-yellow-500 text-black hover:bg-yellow-400" : "border-white/20 bg-black/85 text-white hover:border-yellow-500"}`}><Settings2 size={19} /></button>
+      </div>}
       {nowPlaying?.videoId && (
         <>
           <div aria-hidden={isVideoHidden} className={`fixed bottom-4 right-4 z-50 h-[180px] w-[320px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-white/20 bg-black shadow-2xl transition-all ${isVideoHidden ? "pointer-events-none translate-x-[calc(100%+1rem)] opacity-0" : ""}`}>
