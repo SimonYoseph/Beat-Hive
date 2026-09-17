@@ -71,6 +71,12 @@ const HIVE_ITEMS = [
 
 const MASTER_CONTROL_EMAIL = 'simon97862012@gmail.com';
 
+const TEST_SESSION_TRACKS = [
+  { videoId: 'dQw4w9WgXcQ', title: 'Rick Astley - Never Gonna Give You Up', channelTitle: 'Rick Astley', thumbnail: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg', upvotes: 0 },
+  { videoId: '5NV6Rdv1a3I', title: 'Daft Punk - Get Lucky', channelTitle: 'Daft Punk', thumbnail: 'https://i.ytimg.com/vi/5NV6Rdv1a3I/hqdefault.jpg', upvotes: 0 },
+  { videoId: '4NRXx6U8ABQ', title: 'The Weeknd - Blinding Lights', channelTitle: 'The Weeknd', thumbnail: 'https://i.ytimg.com/vi/4NRXx6U8ABQ/hqdefault.jpg', upvotes: 0 },
+];
+
 const TOTAL_TILES = 32; // Exactly 32 panels on a standard soccer ball
 const RADIUS = 185; // Perfectly tuned to avoid overlapping with 106px shapes
 
@@ -392,6 +398,11 @@ export default function BeatHiveApp() {
     }
     setIsPartyCreator(true);
     if (!roomCode) setRoomCode(crypto.randomUUID().replaceAll('-', '').slice(0, 8).toUpperCase());
+    if (!window.localStorage.getItem('bh_youtube_requests') && !window.localStorage.getItem('bh_play_queue')) {
+      window.localStorage.setItem('bh_youtube_requests', JSON.stringify(TEST_SESSION_TRACKS));
+      window.localStorage.setItem('bh_play_queue', JSON.stringify(TEST_SESSION_TRACKS));
+      window.dispatchEvent(new Event('bh-playback-change'));
+    }
     setDjRoomActive(true);
     window.dispatchEvent(new Event('bh-host-session-change'));
     window.scrollTo(0, 0);
