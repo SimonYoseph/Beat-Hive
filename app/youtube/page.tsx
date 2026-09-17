@@ -67,9 +67,9 @@ function QueueTrackItem({ track, index, isPlaying, canReorder, canRemove, canCon
   });
 
   return (
-    <article ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition: isDragging ? undefined : transition }} className={`grid min-w-0 grid-cols-[1rem_minmax(0,1fr)] items-center gap-x-2 gap-y-1 rounded-lg bg-[#1b1b1b] p-2 will-change-transform lg:flex lg:gap-3 lg:p-3 ${isDragging ? "opacity-40" : ""}`}>
-      <span className="w-4 text-center text-xs font-bold text-yellow-500 lg:w-5 lg:text-sm">{index + 1}</span>
-      <div className="flex min-w-0 items-center gap-2 lg:contents">
+    <article ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition: isDragging ? undefined : transition }} className={`grid min-w-0 grid-cols-[1rem_minmax(0,1fr)] items-center gap-x-2 gap-y-2 rounded-lg bg-[#1b1b1b] p-2 will-change-transform lg:flex lg:gap-3 lg:p-3 ${isDragging ? "opacity-40" : ""}`}>
+      <span className="row-span-2 self-center w-4 text-center text-xs font-bold text-yellow-500 lg:row-auto lg:w-5 lg:text-sm">{index + 1}</span>
+      <div className="col-start-2 flex min-w-0 items-center gap-2 lg:contents">
         {track.thumbnail && (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={track.thumbnail} alt="" className="h-9 w-12 shrink-0 rounded object-cover lg:h-12 lg:w-16" />
