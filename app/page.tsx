@@ -799,7 +799,7 @@ export default function BeatHiveApp() {
 
             <button
               onClick={() => setDjPreviewingGuest(true)}
-              className="w-full rounded-xl border-2 border-yellow-300 bg-yellow-500 py-3.5 font-black text-black shadow-[0_0_0_3px_rgba(245,158,11,.18),0_12px_30px_rgba(245,158,11,.22)] transition-all hover:bg-yellow-400 active:scale-[.98] flex items-center justify-center gap-2"
+              className="w-full rounded-xl border-2 border-red-400 bg-yellow-500 py-3.5 font-black text-black shadow-[0_0_0_3px_rgba(248,113,113,.22),0_12px_30px_rgba(245,158,11,.22)] transition-all hover:bg-yellow-400 active:scale-[.98] flex items-center justify-center gap-2"
             >
               <ShieldAlert size={19} />
               Switch to Hive View
@@ -1104,7 +1104,7 @@ export default function BeatHiveApp() {
           <div className="flex justify-center mb-8 shrink-0 relative z-20">
             <button 
               onClick={() => setDjPreviewingGuest(false)}
-              className="w-full max-w-xs rounded-xl border-2 border-yellow-300 bg-yellow-500 px-5 py-3 font-black text-sm text-black shadow-[0_0_0_3px_rgba(245,158,11,.18),0_12px_30px_rgba(245,158,11,.22)] flex items-center justify-center gap-2 transition-all hover:bg-yellow-400 active:scale-[.98]"
+              className="w-full max-w-xs rounded-xl border-2 border-red-400 bg-yellow-500 px-5 py-3 font-black text-sm text-black shadow-[0_0_0_3px_rgba(248,113,113,.22),0_12px_30px_rgba(245,158,11,.22)] flex items-center justify-center gap-2 transition-all hover:bg-yellow-400 active:scale-[.98]"
             >
               <ShieldAlert size={17} />
               Return to Hive Host View
