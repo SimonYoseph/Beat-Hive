@@ -67,28 +67,28 @@ function QueueTrackItem({ track, index, isPlaying, canReorder, canRemove, canCon
   });
 
   return (
-    <article ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition: isDragging ? undefined : transition }} className={`grid min-w-0 grid-cols-[1rem_minmax(0,1fr)] items-center gap-x-2 gap-y-1 rounded-lg bg-[#1b1b1b] p-2 will-change-transform sm:flex sm:gap-3 sm:p-3 ${isDragging ? "opacity-40" : ""}`}>
-      <span className="w-4 text-center text-xs font-bold text-yellow-500 sm:w-5 sm:text-sm">{index + 1}</span>
-      <div className="flex min-w-0 items-center gap-2 sm:contents">
+    <article ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition: isDragging ? undefined : transition }} className={`grid min-w-0 grid-cols-[1rem_minmax(0,1fr)] items-center gap-x-2 gap-y-1 rounded-lg bg-[#1b1b1b] p-2 will-change-transform lg:flex lg:gap-3 lg:p-3 ${isDragging ? "opacity-40" : ""}`}>
+      <span className="w-4 text-center text-xs font-bold text-yellow-500 lg:w-5 lg:text-sm">{index + 1}</span>
+      <div className="flex min-w-0 items-center gap-2 lg:contents">
         {track.thumbnail && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={track.thumbnail} alt="" className="h-9 w-12 shrink-0 rounded object-cover sm:h-12 sm:w-16" />
+          <img src={track.thumbnail} alt="" className="h-9 w-12 shrink-0 rounded object-cover lg:h-12 lg:w-16" />
         )}
         <div className="min-w-0 flex-1">
-          <h3 className="truncate text-sm font-bold sm:text-base">{track.title}</h3>
-          <p className="truncate text-xs text-gray-400 sm:text-sm">{track.channelTitle}</p>
+          <h3 className="truncate text-sm font-bold lg:text-base">{track.title}</h3>
+          <p className="truncate text-xs text-gray-400 lg:text-sm">{track.channelTitle}</p>
         </div>
       </div>
-      <div className="col-span-2 flex w-full flex-col items-end gap-1 sm:col-auto sm:w-auto sm:max-w-[170px] sm:shrink-0 sm:items-center">
-        {isPlaying && <span className="inline-flex items-center gap-1 whitespace-nowrap text-[10px] font-bold text-red-400 sm:text-xs"><span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,.9)] sm:h-2 sm:w-2" />Now Playing</span>}
-        <div className="flex w-full flex-wrap justify-end gap-1 sm:w-auto sm:justify-center sm:gap-2">
-          {canControlPlayback && <button onClick={() => onPlayNow(track)} className="flex h-7 w-7 items-center justify-center rounded bg-emerald-500/20 text-emerald-300 hover:bg-emerald-400 hover:text-black sm:h-8 sm:w-8" aria-label={`Play ${track.title} now`} title="Play now"><Play size={14} fill="currentColor" /></button>}
-          {canControlPlayback && <button onClick={() => onMoveToTop(track.videoId)} className="flex h-7 w-7 items-center justify-center rounded bg-white/5 text-gray-300 hover:bg-emerald-400 hover:text-black sm:h-8 sm:w-8" aria-label={`Move ${track.title} to top of queue`} title="Move to top"><ArrowUp size={14} /></button>}
-          <button onClick={() => onUpvote(track.videoId)} className={`flex h-7 items-center justify-center rounded bg-white/5 text-xs text-gray-300 hover:bg-yellow-500 hover:text-black sm:h-8 sm:text-sm ${showUpvoteCount ? "gap-0.5 px-1.5 sm:gap-1 sm:px-2" : "w-7 sm:w-8"}`} aria-label={`Upvote ${track.title}`} title="Upvote">
+      <div className="col-span-2 flex w-full flex-col items-end gap-1 lg:col-auto lg:w-auto lg:max-w-[170px] lg:shrink-0 lg:items-center">
+        {isPlaying && <span className="inline-flex items-center gap-1 whitespace-nowrap text-[10px] font-bold text-red-400 lg:text-xs"><span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,.9)] lg:h-2 lg:w-2" />Now Playing</span>}
+        <div className="flex w-full flex-wrap justify-end gap-1 lg:w-auto lg:justify-center lg:gap-2">
+          {canControlPlayback && <button onClick={() => onPlayNow(track)} className="flex h-7 w-7 items-center justify-center rounded bg-emerald-500/20 text-emerald-300 hover:bg-emerald-400 hover:text-black lg:h-8 lg:w-8" aria-label={`Play ${track.title} now`} title="Play now"><Play size={14} fill="currentColor" /></button>}
+          {canControlPlayback && <button onClick={() => onMoveToTop(track.videoId)} className="flex h-7 w-7 items-center justify-center rounded bg-white/5 text-gray-300 hover:bg-emerald-400 hover:text-black lg:h-8 lg:w-8" aria-label={`Move ${track.title} to top of queue`} title="Move to top"><ArrowUp size={14} /></button>}
+          <button onClick={() => onUpvote(track.videoId)} className={`flex h-7 items-center justify-center rounded bg-white/5 text-xs text-gray-300 hover:bg-yellow-500 hover:text-black lg:h-8 lg:text-sm ${showUpvoteCount ? "gap-0.5 px-1.5 lg:gap-1 lg:px-2" : "w-7 lg:w-8"}`} aria-label={`Upvote ${track.title}`} title="Upvote">
             <ThumbsUp size={14} /> {showUpvoteCount && track.upvotes}
           </button>
           {canReorder && (
-            <button type="button" className="flex h-7 w-7 touch-none cursor-grab items-center justify-center rounded bg-white/5 text-gray-300 hover:bg-yellow-500 hover:text-black active:cursor-grabbing sm:h-8 sm:w-8" aria-label={`Drag ${track.title} to reorder`} title="Drag to reorder" {...attributes} {...listeners}>
+            <button type="button" className="flex h-7 w-7 touch-none cursor-grab items-center justify-center rounded bg-white/5 text-gray-300 hover:bg-yellow-500 hover:text-black active:cursor-grabbing lg:h-8 lg:w-8" aria-label={`Drag ${track.title} to reorder`} title="Drag to reorder" {...attributes} {...listeners}>
               <Menu size={16} />
             </button>
           )}
