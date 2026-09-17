@@ -115,7 +115,9 @@ export function Tutorial({ role }: { role: TutorialRole }) {
   useEffect(() => {
     if (!isOpen) return;
     window.dispatchEvent(new Event("bh-tutorial-open"));
-    return () => window.dispatchEvent(new Event("bh-tutorial-close"));
+    return () => {
+      window.dispatchEvent(new Event("bh-tutorial-close"));
+    };
   }, [isOpen]);
 
   useEffect(() => {

@@ -8,6 +8,7 @@ import NextLink from "next/link";
 import { signIn, useSession } from "next-auth/react";
 import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import { usePlayback } from "../playback-provider";
+import { useRoom } from "../room-provider";
 
 const MASTER_CONTROL_EMAIL = "simon97862012@gmail.com";
 
@@ -132,6 +133,7 @@ function DragTrackOverlay({ track }: { track: RequestedTrack }) {
 export default function YoutubePage() {
   const { data: session, status } = useSession();
   const { setIsPlaying, setNowPlaying } = usePlayback();
+  const { room, requestTrack, updateHostState, voteForTrack } = useRoom();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -286,6 +288,26 @@ export default function YoutubePage() {
   }, []);
 
   useEffect(() => {
+    function loadQueueState() {
+      try {
+        const requests = JSON.parse(window.localStorage.getItem("bh_youtube_requests") || "[]") as RequestedTrack[];
+        setRequestTracks(requests.map((track) => ({ ...track, upvotes: typeof track.upvotes === "number" ? track.upvotes : 0 })));
+      } catch {
+        setRequestTracks([]);
+      }
+
+      try {
+        setPlayedTracks(JSON.parse(window.localStorage.getItem("bh_play_history") || "[]") as QueuedTrack[]);
+      } catch {
+        setPlayedTracks([]);
+      }
+    }
+
+    window.addEventListener("bh-playback-change", loadQueueState);
+    return () => window.removeEventListener("bh-playback-change", loadQueueState);
+  }, []);
+
+  useEffect(() => {
     function loadNowPlaying() {
       try {
         const savedTrack = window.localStorage.getItem("bh_now_playing");
@@ -337,6 +359,14 @@ export default function YoutubePage() {
   }
 
   function upvoteHiveTrack(videoId: string) {
+    if (room) {
+      if (canManageQueue) {
+        void updateHostState((state) => ({ ...state, requests: (state.requests || []).map((track) => track.videoId === videoId ? { ...track, upvotes: (track.upvotes || 0) + 1 } : track) })).catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Could not update the queue."));
+        return;
+      }
+      void voteForTrack(videoId).catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Could not register your vote."));
+      return;
+    }
     if (!isMasterAccount && masterSettings.queueLocked) {
       setMessage("Hive Queue edits are locked by Omni Control.");
       return;
@@ -347,6 +377,10 @@ export default function YoutubePage() {
   }
 
   function removeRequest(videoId: string) {
+    if (room && canManageQueue) {
+      void updateHostState((state) => ({ ...state, requests: (state.requests || []).filter((track) => track.videoId !== videoId) })).catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Could not update the queue."));
+      return;
+    }
     const nextRequests = requestTracks.filter((track) => track.videoId !== videoId);
     setRequestTracks(nextRequests);
     window.localStorage.setItem("bh_youtube_requests", JSON.stringify(nextRequests));
@@ -359,6 +393,21 @@ export default function YoutubePage() {
     }
     const { active, over } = event;
     if (!over || active.id === over.id) return;
+
+    if (room && canManageQueue) {
+      const activeId = String(active.id);
+      const overId = String(over.id);
+      const requestIndex = requestTracks.findIndex((track) => `request-${track.videoId}` === activeId);
+      if (requestIndex >= 0) {
+        const targetIndex = requestTracks.findIndex((track) => `request-${track.videoId}` === overId);
+        if (targetIndex >= 0) void updateHostState((state) => ({ ...state, requests: arrayMove(state.requests || [], requestIndex, targetIndex) })).catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Could not reorder requests."));
+        return;
+      }
+      const queueIndex = playQueue.findIndex((track) => track.videoId === activeId);
+      const targetIndex = playQueue.findIndex((track) => track.videoId === overId);
+      if (queueIndex >= 0 && targetIndex >= 0) void updateHostState((state) => ({ ...state, queue: arrayMove(state.queue || [], queueIndex, targetIndex) })).catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Could not reorder the Hive Queue."));
+      return;
+    }
 
     const requestIndex = requestTracks.findIndex((track) => `request-${track.videoId}` === active.id);
     if (requestIndex >= 0) {
@@ -426,6 +475,16 @@ export default function YoutubePage() {
 
   function removeTrack(videoId: string) {
     if (!canManageQueue) return;
+    if (room) {
+      void updateHostState((state) => {
+        const queue = state.queue || [];
+        const removedIndex = queue.findIndex((track) => track.videoId === videoId);
+        const nextQueue = queue.filter((track) => track.videoId !== videoId);
+        const nextTrack = state.nowPlaying?.videoId === videoId ? (queue[removedIndex + 1] || nextQueue[0] || null) : state.nowPlaying;
+        return { ...state, queue: nextQueue, nowPlaying: nextTrack, isPlaying: Boolean(nextTrack) && state.isPlaying };
+      }).catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Could not update the queue."));
+      return;
+    }
     const nextQueue = playQueue.filter((track) => track.videoId !== videoId);
     setPlayQueue(nextQueue);
     window.localStorage.setItem("bh_play_queue", JSON.stringify(nextQueue));
@@ -446,6 +505,10 @@ export default function YoutubePage() {
 
   function playTrackNow(track: RequestedTrack) {
     if (!canManageQueue) return;
+    if (room) {
+      void updateHostState((state) => ({ ...state, nowPlaying: track, isPlaying: true })).catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Could not start this track."));
+      return;
+    }
     setNowPlaying(track);
     setNowPlayingId(track.videoId);
     setIsPlaying(true);
@@ -454,6 +517,14 @@ export default function YoutubePage() {
 
   function moveTrackToTop(videoId: string) {
     if (!canManageQueue) return;
+    if (room) {
+      void updateHostState((state) => {
+        const queue = state.queue || [];
+        const index = queue.findIndex((track) => track.videoId === videoId);
+        return index < 0 ? state : { ...state, queue: arrayMove(queue, index, 0) };
+      }).catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Could not update the queue."));
+      return;
+    }
     const trackIndex = playQueue.findIndex((track) => track.videoId === videoId);
     if (trackIndex < 0) return;
     const nextQueue = arrayMove(playQueue, trackIndex, 0);
@@ -497,6 +568,19 @@ export default function YoutubePage() {
     }
     if (!isMasterAccount && requestTracks.length >= masterSettings.maxRequests) {
       setMessage(`Request limit reached (${masterSettings.maxRequests}).`);
+      return;
+    }
+
+    if (room) {
+      setQueueingId(track.id.videoId);
+      try {
+        await requestTrack(toQueuedTrack(track));
+        setMessage(`Requested “${track.snippet.title}” for the Hive Queue.`);
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : "Could not request this track.");
+      } finally {
+        setQueueingId(null);
+      }
       return;
     }
 

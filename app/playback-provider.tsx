@@ -5,6 +5,8 @@ import { createContext, ReactNode, PointerEvent as ReactPointerEvent, useContext
 import { Activity, Eye, EyeOff, Pause, Play, RotateCcw, SkipBack, SkipForward, Square, Volume2, VolumeX } from "lucide-react";
 import { useSession } from "next-auth/react";
 
+import { RoomState, useRoom } from "./room-provider";
+
 const MASTER_CONTROL_EMAIL = "simon97862012@gmail.com";
 
 type NowPlayingTrack = {
@@ -57,6 +59,7 @@ function recordPlayedTrack(track: NowPlayingTrack) {
 
 export function PlaybackProvider({ children }: { children: ReactNode }) {
   const { data: session } = useSession();
+  const { room, refreshRoom, updateHostState } = useRoom();
   const [nowPlaying, updateNowPlaying] = useState<NowPlayingTrack | null>(null);
   const [isPlaying, updateIsPlaying] = useState(false);
   const [isMuted, updateIsMuted] = useState(false);
@@ -81,9 +84,15 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const sessionControlLabel = isMasterAccount ? "OMNI CONTROL" : "HIVE SESSION";
   const getCollapsedControlWidth = () => window.innerWidth < 640 ? 40 : 170;
 
+  function persistHostState(update: (state: RoomState) => RoomState) {
+    if (!room || !canControlSession) return;
+    void updateHostState(update).catch(() => { void refreshRoom(); });
+  }
+
   function startPlayback() {
     updateIsMuted(true);
     updateIsPlaying(true);
+    persistHostState((state) => ({ ...state, isPlaying: true }));
   }
 
   function refreshPlayback() {
@@ -98,9 +107,24 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     updateNowPlaying(track);
     if (track) window.localStorage.setItem("bh_now_playing", JSON.stringify(track));
     else window.localStorage.removeItem("bh_now_playing");
+    persistHostState((state) => ({ ...state, nowPlaying: track?.videoId ? { ...track, videoId: track.videoId } : null }));
   }
 
   function handleTrackEnded() {
+    if (room && !canControlSession) {
+      updateIsPlaying(false);
+      return;
+    }
+    if (room && canControlSession) {
+      persistHostState((state) => {
+        const queue = state.queue || [];
+        const currentIndex = queue.findIndex((track) => track.videoId === nowPlaying?.videoId);
+        const nextQueue = currentIndex >= 0 ? queue.filter((_, index) => index !== currentIndex) : queue;
+        const nextTrack = nextQueue[currentIndex] || nextQueue[0] || null;
+        return { ...state, queue: nextQueue, nowPlaying: nextTrack, isPlaying: Boolean(nextTrack) };
+      });
+      return;
+    }
     try {
       const queue = JSON.parse(window.localStorage.getItem("bh_play_queue") || "[]") as NowPlayingTrack[];
       const currentIndex = queue.findIndex((track) => track.videoId === nowPlaying?.videoId);
@@ -119,6 +143,13 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   }
 
   function playPreviousTrack() {
+    if (room && canControlSession) {
+      const queue = room.state.queue || [];
+      const currentIndex = queue.findIndex((track) => track.videoId === nowPlaying?.videoId);
+      const previousTrack = currentIndex > 0 ? queue[currentIndex - 1] : null;
+      if (previousTrack) persistHostState((state) => ({ ...state, nowPlaying: previousTrack, isPlaying: true }));
+      return;
+    }
     try {
       const history = JSON.parse(window.localStorage.getItem("bh_play_history") || "[]") as NowPlayingTrack[];
       const previousTrack = history.filter((track) => track.videoId !== nowPlaying?.videoId).at(-1);
@@ -132,6 +163,13 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   }
 
   function playNextTrack() {
+    if (room && canControlSession) {
+      const queue = room.state.queue || [];
+      const currentIndex = queue.findIndex((track) => track.videoId === nowPlaying?.videoId);
+      const nextTrack = queue[currentIndex + 1];
+      if (nextTrack) persistHostState((state) => ({ ...state, nowPlaying: nextTrack, isPlaying: true }));
+      return;
+    }
     try {
       const queue = JSON.parse(window.localStorage.getItem("bh_play_queue") || "[]") as NowPlayingTrack[];
       const currentIndex = queue.findIndex((track) => track.videoId === nowPlaying?.videoId);
@@ -157,25 +195,39 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     setMasterSettings(nextSettings);
     window.localStorage.setItem("bh_masterSettings", JSON.stringify(nextSettings));
     window.dispatchEvent(new Event("bh-master-settings-change"));
+    persistHostState((state) => ({ ...state, settings: { ...(state.settings || {}), ...update } }));
   }
 
   function stopAudio() {
     updateIsPlaying(false);
     setNowPlaying(null);
     window.dispatchEvent(new Event("bh-playback-change"));
+    persistHostState((state) => ({ ...state, nowPlaying: null, isPlaying: false }));
   }
 
   function clearHiveQueue() {
+    if (room && canControlSession) {
+      persistHostState((state) => ({ ...state, queue: [], nowPlaying: null, isPlaying: false }));
+      return;
+    }
     window.localStorage.setItem("bh_play_queue", "[]");
     stopAudio();
   }
 
   function clearAttendeeRequests() {
+    if (room && canControlSession) {
+      persistHostState((state) => ({ ...state, requests: [] }));
+      return;
+    }
     window.localStorage.setItem("bh_youtube_requests", "[]");
     window.dispatchEvent(new Event("bh-playback-change"));
   }
 
   function resetSession() {
+    if (room && canControlSession) {
+      persistHostState((state) => ({ ...state, requests: [], queue: [], nowPlaying: null, isPlaying: false }));
+      return;
+    }
     ["bh_play_queue", "bh_youtube_requests", "bh_play_history", "bh_now_playing"].forEach((key) => window.localStorage.removeItem(key));
     stopAudio();
   }
@@ -237,6 +289,13 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("bh-playback-change", handlePlaybackChange);
     };
   }, []);
+
+  useEffect(() => {
+    if (!room) return;
+    updateNowPlaying(room.state.nowPlaying || null);
+    if (typeof room.state.isPlaying === "boolean") updateIsPlaying(room.state.isPlaying);
+    if (room.state.settings) setMasterSettings({ ...DEFAULT_MASTER_SETTINGS, ...room.state.settings as Partial<MasterSettings> });
+  }, [room]);
 
   useEffect(() => {
     const syncHostSession = () => {
@@ -344,7 +403,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   }, [isPlaying, nowPlaying?.videoId]);
 
   return (
-    <PlaybackContext.Provider value={{ nowPlaying, isPlaying, setNowPlaying, setIsPlaying: (playing) => playing ? startPlayback() : updateIsPlaying(false), refreshPlayback }}>
+    <PlaybackContext.Provider value={{ nowPlaying, isPlaying, setNowPlaying, setIsPlaying: (playing) => playing ? startPlayback() : (updateIsPlaying(false), persistHostState((state) => ({ ...state, isPlaying: false }))), refreshPlayback }}>
       {children}
       {canControlSession && !isTutorialOpen && <div className="fixed z-50" style={{ left: isMasterPanelOpen ? Math.max(0, Math.min(masterControlPosition.x, window.innerWidth - Math.min(masterControlSize.width, window.innerWidth - 32) - 16)) : masterControlPosition.x, top: masterControlPosition.y }}>
         {isMasterPanelOpen && <div className="relative mb-2 w-[calc(100vw-2rem)] max-w-[440px] rounded-lg border border-yellow-400/40 bg-[#17130b]/95 p-3 shadow-[0_0_36px_rgba(234,179,8,.2)] backdrop-blur" style={{ width: `min(${masterControlSize.width}px, calc(100vw - 2rem))` }}>
@@ -359,7 +418,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
             <div className="mt-3 rounded-md border border-yellow-400/20 bg-black/30 p-2">
               <div className="grid grid-cols-3 gap-2">
                 <button onClick={playPreviousTrack} disabled={!nowPlaying} aria-label="Play previous song" title="Play previous song" className="flex h-11 items-center justify-center rounded-md bg-white/10 text-white transition-all hover:bg-yellow-400 hover:text-black disabled:opacity-40"><SkipBack size={19} fill="currentColor" /></button>
-                <button onClick={() => isPlaying ? updateIsPlaying(false) : startPlayback()} disabled={!nowPlaying} aria-label={isPlaying ? "Pause song" : "Play song"} title={isPlaying ? "Pause song" : "Play song"} className="flex h-11 items-center justify-center rounded-full border-2 border-yellow-200/70 bg-yellow-500 text-black shadow-[0_0_20px_rgba(234,179,8,.4)] transition-all hover:scale-105 disabled:opacity-40">{isPlaying ? <Pause size={19} fill="currentColor" /> : <Play size={19} fill="currentColor" />}</button>
+                <button onClick={() => isPlaying ? (updateIsPlaying(false), persistHostState((state) => ({ ...state, isPlaying: false }))) : startPlayback()} disabled={!nowPlaying} aria-label={isPlaying ? "Pause song" : "Play song"} title={isPlaying ? "Pause song" : "Play song"} className="flex h-11 items-center justify-center rounded-full border-2 border-yellow-200/70 bg-yellow-500 text-black shadow-[0_0_20px_rgba(234,179,8,.4)] transition-all hover:scale-105 disabled:opacity-40">{isPlaying ? <Pause size={19} fill="currentColor" /> : <Play size={19} fill="currentColor" />}</button>
                 <button onClick={playNextTrack} disabled={!nowPlaying} aria-label="Play next song" title="Play next song" className="flex h-11 items-center justify-center rounded-md bg-white/10 text-white transition-all hover:bg-yellow-400 hover:text-black disabled:opacity-40"><SkipForward size={19} fill="currentColor" /></button>
               </div>
               <div className="mt-2 flex items-center gap-2"><button onClick={() => setVolume(volume ? 0 : 1)} aria-label={volume ? "Mute audio" : "Unmute audio"} className="text-yellow-300">{volume ? <Volume2 size={17} /> : <VolumeX size={17} />}</button><input aria-label="Omni Control volume" type="range" min="0" max="1" step="0.05" value={volume} onChange={(event) => setVolume(Number(event.target.value))} className="w-full accent-yellow-400" /></div>

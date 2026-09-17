@@ -11,6 +11,14 @@ npm run dev
 
 Open `http://localhost:3000`. The music request page is at `http://localhost:3000/youtube`.
 
+## Shared Hive Sessions
+
+For shared event rooms, create a Supabase project and run [supabase/migrations/20260917230000_shared_hive_rooms.sql](supabase/migrations/20260917230000_shared_hive_rooms.sql) in the Supabase SQL editor. Add `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` to `.env.local` and the Vercel project environment. Keep the service-role key server-only.
+
+The room API is available at `/api/rooms`: signed-in hosts create rooms with `POST`, and guests fetch room snapshots with `GET /api/rooms/:code`. The migration enables Supabase Realtime replication for `hive_rooms` and provides atomic state and vote operations.
+
+Deploy the environment variables to Vercel before building the production deployment because `NEXT_PUBLIC_` variables are embedded at build time. After a host creates a staging room, run `BEAT_HIVE_BASE_URL=https://your-staging-url BEAT_HIVE_ROOM_CODE=ROOMCODE npm run stress:room` to check 300 simultaneous room snapshots. Full end-to-end load testing also requires test accounts or an authenticated browser test harness for host mutations and guest vote cookies.
+
 ## Music Requests
 
 - Search YouTube or paste a `youtube.com`, `music.youtube.com`, or `youtu.be` link.

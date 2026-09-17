@@ -42,6 +42,7 @@ import {
 import { signIn, signOut, useSession } from "next-auth/react";
 import { motion, AnimatePresence, useMotionValue, animate, useTransform } from "framer-motion";
 import { usePlayback } from "./playback-provider";
+import { useRoom } from "./room-provider";
 import { Tutorial } from "./tutorial";
 
 // Mock DJ Data for Genres to display tallies
@@ -253,6 +254,7 @@ export default function BeatHiveApp() {
   const { data: session } = useSession();
   const authProvider = (session as (typeof session & { provider?: string }) | null)?.provider;
   const { nowPlaying, isPlaying, setNowPlaying, setIsPlaying } = usePlayback();
+  const { room: sharedRoom, createRoom } = useRoom();
   const userEmail = session?.user?.email;
     // YouTube search state
       // Removed unused YouTube search state variables
@@ -316,6 +318,15 @@ export default function BeatHiveApp() {
     window.addEventListener('bh-tutorial-guest-open', showTutorialActions);
     return () => window.removeEventListener('bh-tutorial-guest-open', showTutorialActions);
   }, [setViewMode]);
+
+  useEffect(() => {
+    const feedback = sharedRoom?.state.feedback;
+    if (!feedback) return;
+    if (feedback.energyPreference === 'up' || feedback.energyPreference === 'down') setEnergyPreference(feedback.energyPreference);
+    if (typeof feedback.selectedVibe === 'string') setSelectedVibe(feedback.selectedVibe);
+    if (typeof feedback.lastShoutout === 'string') setLastShoutout(feedback.lastShoutout);
+    if (typeof feedback.tipTotal === 'number') setTipTotal(feedback.tipTotal);
+  }, [sharedRoom, setEnergyPreference, setLastShoutout, setSelectedVibe, setTipTotal]);
 
   useEffect(() => {
     const syncMasterControl = () => {
@@ -441,25 +452,26 @@ export default function BeatHiveApp() {
     window.scrollTo(0, 0);
   };
 
-  const handleStartDJRoom = () => {
+  const handleStartDJRoom = async () => {
     if (!userEmail) {
       alert('Sign in before starting a DJ room.');
       return;
     }
-    setIsPartyCreator(true);
-    if (!roomCode) setRoomCode(crypto.randomUUID().replaceAll('-', '').slice(0, 8).toUpperCase());
-    if (!window.localStorage.getItem('bh_youtube_requests') && !window.localStorage.getItem('bh_play_queue')) {
-      window.localStorage.setItem('bh_youtube_requests', JSON.stringify(TEST_SESSION_TRACKS));
-      window.localStorage.setItem('bh_play_queue', JSON.stringify(TEST_SESSION_TRACKS));
-      window.dispatchEvent(new Event('bh-playback-change'));
+    try {
+      const room = await createRoom(roomName);
+      setRoomCode(room.code);
+      setRoomName(room.name);
+      setIsPartyCreator(true);
+      setDjRoomActive(true);
+      window.dispatchEvent(new Event('bh-host-session-change'));
+      window.scrollTo(0, 0);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Could not create a shared room.');
     }
-    setDjRoomActive(true);
-    window.dispatchEvent(new Event('bh-host-session-change'));
-    window.scrollTo(0, 0);
   };
 
-  const roomLink = roomCode && typeof window !== 'undefined'
-    ? `${window.location.origin}/join?${new URLSearchParams({ room: roomCode, host: session?.user?.name || 'Hive Host', hostEmail: userEmail || '', roomName }).toString()}`
+  const roomLink = (sharedRoom?.code || roomCode) && typeof window !== 'undefined'
+    ? `${window.location.origin}/join?${new URLSearchParams({ room: sharedRoom?.code || roomCode }).toString()}`
     : '';
 
   const copyRoomLink = async () => {
@@ -1130,7 +1142,7 @@ export default function BeatHiveApp() {
         </div>}
 
         {/* View Toggle */}
-        <div data-tutorial-target="guest-view-toggle" className="flex items-center gap-2 mb-4 shrink-0 mx-auto">
+        <div data-tutorial-target="guest-view-toggle" className="mx-auto mb-8 mt-4 flex shrink-0 items-center gap-2">
           <div className="flex bg-[#1a1a1a] rounded-xl p-1 border border-white/5 w-48 relative overflow-hidden">
             <motion.div
               layout
@@ -1442,14 +1454,18 @@ type ActionControlsProps = {
 
 function ActionControls({ actionId, userRole, energyPreference, onEnergyChange, selectedVibe, onVibeChange, lastShoutout, onShoutout, tipTotal, onTip }: ActionControlsProps) {
   const [shoutoutDraft, setShoutoutDraft] = useState('');
+  const { room, sendFeedback } = useRoom();
+  const syncFeedback = (feedback: Record<string, unknown>) => {
+    if (room) void sendFeedback(feedback).catch(() => undefined);
+  };
 
   if (actionId === 'hive') return <NextLink href="/hive" className="mt-1 flex w-full items-center justify-center gap-2 rounded-lg bg-yellow-500 px-4 py-3 font-bold text-black hover:bg-yellow-400"><Users size={18} /> Enter the Hive</NextLink>;
   if (actionId === 'request') return <NextLink href="/youtube" className="mt-1 flex w-full items-center justify-center gap-2 rounded-lg bg-yellow-500 px-4 py-3 font-bold text-black hover:bg-yellow-400"><Search size={18} /> Find a track</NextLink>;
   if (actionId === 'queue' || actionId === 'upvote') return <NextLink href="/youtube" className="mt-1 flex w-full items-center justify-center gap-2 rounded-lg bg-yellow-500 px-4 py-3 font-bold text-black hover:bg-yellow-400">{actionId === 'upvote' ? <ThumbsUp size={18} /> : <ListMusic size={18} />}{actionId === 'upvote' ? ' Vote on requests' : ' View your queue'}</NextLink>;
-  if (actionId === 'energy') return <EnergyControls energyPreference={energyPreference} onEnergyChange={onEnergyChange} />;
-  if (actionId === 'vibes') return <div className="flex flex-wrap gap-2 pt-1">{GENRE_TALLIES.map((genre) => <button key={genre.name} type="button" onClick={(event) => { event.stopPropagation(); onVibeChange((currentVibe) => currentVibe === genre.name ? null : genre.name); }} aria-pressed={selectedVibe === genre.name} className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${selectedVibe === genre.name ? 'bg-yellow-500 text-black' : 'bg-white/5 text-gray-200 hover:bg-yellow-500 hover:text-black'}`}><span>{genre.name}</span>{userRole === 'dj' && <span className="text-[10px] opacity-70">{genre.count}</span>}</button>)}</div>;
-  if (actionId === 'shoutout') return <form className="space-y-2 pt-1" onSubmit={(event) => { event.preventDefault(); const message = shoutoutDraft.trim(); if (!message) return; onShoutout(message); setShoutoutDraft(''); }}><label className="sr-only" htmlFor="shoutout-message">Message for the Hive Host</label><textarea id="shoutout-message" value={shoutoutDraft} onChange={(event) => setShoutoutDraft(event.target.value)} onClick={(event) => event.stopPropagation()} maxLength={180} placeholder="Send a message to the Hive Host" className="min-h-20 w-full resize-none rounded-lg border border-white/10 bg-white/5 p-3 text-sm text-white outline-none placeholder:text-gray-500 focus:border-yellow-500" /><button type="submit" className="flex w-full items-center justify-center gap-2 rounded-lg bg-yellow-500 px-4 py-3 text-sm font-bold text-black hover:bg-yellow-400"><MessageSquare size={17} /> Send shoutout</button>{lastShoutout && <p className="text-center text-xs text-gray-400">Last sent: {lastShoutout}</p>}</form>;
-  if (actionId === 'tip') return <div className="space-y-2 pt-1"><div className="grid grid-cols-3 gap-2">{[2, 5, 10].map((amount) => <button key={amount} type="button" onClick={(event) => { event.stopPropagation(); onTip(amount); }} className="rounded-lg bg-white/5 px-3 py-3 text-sm font-bold text-gray-100 hover:bg-pink-500 hover:text-white">${amount}</button>)}</div><p className="text-center text-xs text-gray-400">Support recorded: ${tipTotal.toFixed(2)}. Payments require a connected payment provider.</p></div>;
+  if (actionId === 'energy') return <EnergyControls energyPreference={energyPreference} onEnergyChange={(update) => { onEnergyChange(update); const nextValue = typeof update === 'function' ? update(energyPreference) : update; syncFeedback({ energyPreference: nextValue }); }} />;
+  if (actionId === 'vibes') return <div className="flex flex-wrap gap-2 pt-1">{GENRE_TALLIES.map((genre) => <button key={genre.name} type="button" onClick={(event) => { event.stopPropagation(); const nextValue = selectedVibe === genre.name ? null : genre.name; onVibeChange(nextValue); syncFeedback({ selectedVibe: nextValue }); }} aria-pressed={selectedVibe === genre.name} className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${selectedVibe === genre.name ? 'bg-yellow-500 text-black' : 'bg-white/5 text-gray-200 hover:bg-yellow-500 hover:text-black'}`}><span>{genre.name}</span>{userRole === 'dj' && <span className="text-[10px] opacity-70">{genre.count}</span>}</button>)}</div>;
+  if (actionId === 'shoutout') return <form className="space-y-2 pt-1" onSubmit={(event) => { event.preventDefault(); const message = shoutoutDraft.trim(); if (!message) return; onShoutout(message); syncFeedback({ lastShoutout: message }); setShoutoutDraft(''); }}><label className="sr-only" htmlFor="shoutout-message">Message for the Hive Host</label><textarea id="shoutout-message" value={shoutoutDraft} onChange={(event) => setShoutoutDraft(event.target.value)} onClick={(event) => event.stopPropagation()} maxLength={180} placeholder="Send a message to the Hive Host" className="min-h-20 w-full resize-none rounded-lg border border-white/10 bg-white/5 p-3 text-sm text-white outline-none placeholder:text-gray-500 focus:border-yellow-500" /><button type="submit" className="flex w-full items-center justify-center gap-2 rounded-lg bg-yellow-500 px-4 py-3 text-sm font-bold text-black hover:bg-yellow-400"><MessageSquare size={17} /> Send shoutout</button>{lastShoutout && <p className="text-center text-xs text-gray-400">Last sent: {lastShoutout}</p>}</form>;
+  if (actionId === 'tip') return <div className="space-y-2 pt-1"><div className="grid grid-cols-3 gap-2">{[2, 5, 10].map((amount) => <button key={amount} type="button" onClick={(event) => { event.stopPropagation(); onTip(amount); syncFeedback({ tipTotal: tipTotal + amount }); }} className="rounded-lg bg-white/5 px-3 py-3 text-sm font-bold text-gray-100 hover:bg-pink-500 hover:text-white">${amount}</button>)}</div><p className="text-center text-xs text-gray-400">Support recorded: ${tipTotal.toFixed(2)}. Payments require a connected payment provider.</p></div>;
   return null;
 }
 
@@ -1502,6 +1518,7 @@ function SphereCarousel({ userRole, energyPreference, onEnergyChange, selectedVi
   const isDragging = useRef(false);
   const isSnapping = useRef(false);
   const dragDistance = useRef(0);
+  const didDragRef = useRef(false);
   const prevTouch = useRef<{ x: number; y: number } | null>(null);
   const velocity = useRef({ x: 0, y: 0 });
   const lastTime = useRef(0);
@@ -1578,6 +1595,7 @@ function SphereCarousel({ userRole, energyPreference, onEnergyChange, selectedVi
     isSnapping.current = false;
     isDragging.current = true;
     dragDistance.current = 0;
+    didDragRef.current = false;
     prevTouch.current = { x: e.clientX, y: e.clientY };
     lastTime.current = performance.now();
     lastMoveTime.current = performance.now();
@@ -1596,6 +1614,7 @@ function SphereCarousel({ userRole, energyPreference, onEnergyChange, selectedVi
     const dy = e.clientY - prevTouch.current.y;
     
     dragDistance.current += Math.hypot(dx, dy);
+    if (dragDistance.current >= 15) didDragRef.current = true;
 
     // Natural 1:1 spherical arc rotation (Apple Maps / Google Maps feel)
     const SENSITIVITY = 1 / 185;
@@ -1627,6 +1646,8 @@ function SphereCarousel({ userRole, energyPreference, onEnergyChange, selectedVi
     if (!isDragging.current) return;
     isDragging.current = false;
     prevTouch.current = null;
+    velocity.current = { x: 0, y: 0 };
+    stopInertia();
 
     try {
       if (e.currentTarget.hasPointerCapture?.(e.pointerId)) {
@@ -1634,73 +1655,23 @@ function SphereCarousel({ userRole, energyPreference, onEnergyChange, selectedVi
       }
     } catch {}
 
-    const now = performance.now();
-    if (now - lastMoveTime.current > 75) {
-      velocity.current = { x: 0, y: 0 };
-    }
-
-    const speed = Math.hypot(velocity.current.x, velocity.current.y);
-
-    if (dragDistance.current < 15) {
-      // Direct tap detection on touch or click
-      if (typeof document !== 'undefined') {
-        const targetEl = document.elementFromPoint(e.clientX, e.clientY);
-        const itemEl = targetEl?.closest('[data-item-id]');
-        const clickedId = itemEl?.getAttribute('data-item-id');
-        if (clickedId) {
-          const clickedItem = HIVE_ITEMS_3D.find(it => it.id === clickedId);
-          if (clickedItem) {
-            snapToItem(clickedItem);
-            return;
-          }
-        }
+    if (!didDragRef.current) {
+      const targetElement = document.elementFromPoint(e.clientX, e.clientY);
+      const itemElement = targetElement?.closest<HTMLElement>("[data-item-id]");
+      const clickedId = itemElement?.dataset.itemId;
+      const clickedItem = HIVE_ITEMS_3D.find((item) => item.id === clickedId);
+      if (clickedItem) {
+        handleClickItem(clickedItem);
+        didDragRef.current = true;
       }
-      snapToClosest();
-      return;
-    }
-
-    if (speed > 0.0003) {
-      let lastFrame = performance.now();
-      const FRICTION = 0.94;
-      const VERTICAL_LIMIT = Math.PI / 2.2;
-
-      const tick = (frameTime: number) => {
-        const dt = Math.min(32, Math.max(1, frameTime - lastFrame));
-        lastFrame = frameTime;
-
-        const decay = Math.pow(FRICTION, dt / 16.67);
-        velocity.current.x *= decay;
-        velocity.current.y *= decay;
-
-        const nextY = rotY.get() + velocity.current.x * dt;
-        let nextX = rotX.get() + velocity.current.y * dt;
-
-        if (nextX > VERTICAL_LIMIT) {
-          nextX = VERTICAL_LIMIT;
-          velocity.current.y = -velocity.current.y * 0.3;
-        } else if (nextX < -VERTICAL_LIMIT) {
-          nextX = -VERTICAL_LIMIT;
-          velocity.current.y = -velocity.current.y * 0.3;
-        }
-
-        rotY.set(nextY);
-        rotX.set(nextX);
-        const curSpeed = Math.hypot(velocity.current.x, velocity.current.y);
-        if (curSpeed > 0.00008) {
-          animFrameRef.current = requestAnimationFrame(tick);
-        } else {
-          snapToClosest();
-        }
-      };
-
-      stopInertia();
-      animFrameRef.current = requestAnimationFrame(tick);
-    } else {
-      snapToClosest();
     }
   };
 
   const handleClickItem = (item: any) => {
+    if (didDragRef.current) {
+      didDragRef.current = false;
+      return;
+    }
     if (item.id.replace(/-\d+$/, '') === 'hive') {
       window.location.assign('/hive');
       return;
@@ -1711,13 +1682,14 @@ function SphereCarousel({ userRole, energyPreference, onEnergyChange, selectedVi
   const activeItem = ALL_ITEMS.find(item => item.id === activeId) || ALL_ITEMS[0];
 
   return (
-    <div className="relative w-full max-w-[420px] mx-auto flex flex-col items-center justify-start flex-1 -mt-2">
+    <div className="relative mx-auto mt-2 flex w-full max-w-[420px] flex-1 flex-col items-center justify-start">
       {/* Universal Drag Container allowing all axes */}
       <div 
         className="relative w-full h-[380px] flex items-center justify-center cursor-grab active:cursor-grabbing shrink-0 select-none overflow-hidden"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
+        onPointerLeave={handlePointerUp}
         onPointerCancel={handlePointerUp}
         style={{ perspective: "1000px", transformStyle: "preserve-3d", touchAction: 'none', WebkitTapHighlightColor: 'transparent' }}
       >
@@ -1728,10 +1700,10 @@ function SphereCarousel({ userRole, energyPreference, onEnergyChange, selectedVi
           <SphereItem key={item.id} item={item} rotX={rotX} rotY={rotY} isActive={activeId === item.id} onClick={() => handleClickItem(item)} />
         ))}
       </div>
-      <p className="text-[10px] text-[#555] font-bold tracking-widest uppercase">Drag freely • Tap to Snap</p>
+      <p className="mt-3 text-[10px] font-bold uppercase tracking-widest text-[#555]">Drag freely • Tap to Snap</p>
 
       {/* Dynamic Selected Action Details */}
-      <div className="text-center min-h-[80px] relative z-0 mt-4 pb-12 w-full px-4">
+      <div className="relative z-0 mt-6 min-h-[80px] w-full px-4 pb-12 text-center">
         <AnimatePresence mode="wait">
             <motion.div
               key={activeId}
