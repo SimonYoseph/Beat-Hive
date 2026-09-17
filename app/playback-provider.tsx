@@ -106,12 +106,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     <PlaybackContext.Provider value={{ nowPlaying, isPlaying, setNowPlaying, setIsPlaying: (playing) => playing ? startPlayback() : updateIsPlaying(false), refreshPlayback }}>
       {children}
       {nowPlaying?.videoId && (
-        isVideoHidden ? (
-          <button onClick={() => setIsVideoHidden(false)} aria-label="Show video player" title="Show video player" className="fixed bottom-4 right-4 z-50 flex h-11 w-11 items-center justify-center rounded-lg border border-white/20 bg-black/85 text-white shadow-xl backdrop-blur hover:border-yellow-500 hover:text-yellow-500">
-            <Eye size={19} />
-          </button>
-        ) : (
-          <div className="fixed bottom-4 right-4 z-50 h-[180px] w-[320px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-white/20 bg-black shadow-2xl">
+        <>
+          <div aria-hidden={isVideoHidden} className={`fixed bottom-4 right-4 z-50 h-[180px] w-[320px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-white/20 bg-black shadow-2xl transition-all ${isVideoHidden ? "pointer-events-none translate-x-[calc(100%+1rem)] opacity-0" : ""}`}>
             <button onClick={() => setIsVideoHidden(true)} aria-label="Hide video player" title="Hide video player" className="absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded bg-black/70 text-white hover:bg-black hover:text-yellow-500">
               <EyeOff size={16} />
             </button>
@@ -134,7 +130,10 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
               onEnded={handleTrackEnded}
             />
           </div>
-        )
+          {isVideoHidden && <button onClick={() => setIsVideoHidden(false)} aria-label="Show video player" title="Show video player" className="fixed bottom-4 right-4 z-50 flex h-11 w-11 items-center justify-center rounded-lg border border-white/20 bg-black/85 text-white shadow-xl backdrop-blur hover:border-yellow-500 hover:text-yellow-500">
+            <Eye size={19} />
+          </button>}
+        </>
       )}
     </PlaybackContext.Provider>
   );
