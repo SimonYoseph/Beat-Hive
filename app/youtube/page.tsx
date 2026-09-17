@@ -9,6 +9,8 @@ import { signIn, useSession } from "next-auth/react";
 import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import { usePlayback } from "../playback-provider";
 
+const MASTER_CONTROL_EMAIL = "simon97862012@gmail.com";
+
 type SearchResult = {
   id: { videoId: string };
   snippet: { title: string; channelTitle: string; thumbnails: { medium?: { url: string }; default?: { url: string } } };
@@ -39,12 +41,13 @@ type QueueTrackItemProps = {
   index: number;
   isPlaying: boolean;
   canReorder: boolean;
+  canRemove: boolean;
   showUpvoteCount: boolean;
   onRemove: (videoId: string) => void;
   onUpvote: (videoId: string) => void;
 };
 
-function QueueTrackItem({ track, index, isPlaying, canReorder, showUpvoteCount, onRemove, onUpvote }: QueueTrackItemProps) {
+function QueueTrackItem({ track, index, isPlaying, canReorder, canRemove, showUpvoteCount, onRemove, onUpvote }: QueueTrackItemProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: track.videoId,
     disabled: !canReorder,
@@ -71,9 +74,9 @@ function QueueTrackItem({ track, index, isPlaying, canReorder, showUpvoteCount, 
             <Menu size={18} />
           </button>
         )}
-        <button onClick={() => onRemove(track.videoId)} className="flex h-7 w-7 items-center justify-center rounded bg-white/5 text-gray-400 hover:bg-red-500 hover:text-white" aria-label={`Remove ${track.title} from queue`} title="Remove from queue">
+        {canRemove && <button onClick={() => onRemove(track.videoId)} className="flex h-7 w-7 items-center justify-center rounded bg-white/5 text-gray-400 hover:bg-red-500 hover:text-white" aria-label={`Remove ${track.title} from queue`} title="Remove from queue">
           <Trash2 size={14} />
-        </button>
+        </button>}
       </div>
     </article>
   );
@@ -96,6 +99,8 @@ export default function YoutubePage() {
   const [isQueueCollapsed, setIsQueueCollapsed] = useState(false);
   const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
   const [isHost, setIsHost] = useState(false);
+  const isMasterAccount = session?.user?.email?.toLowerCase() === MASTER_CONTROL_EMAIL;
+  const canManageQueue = isMasterAccount || isHost;
   const searchFormRef = useRef<HTMLFormElement>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -267,6 +272,7 @@ export default function YoutubePage() {
   }
 
   function handleDragEnd(event: DragEndEvent) {
+    if (!canManageQueue) return;
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
@@ -282,6 +288,7 @@ export default function YoutubePage() {
   }
 
   function removeTrack(videoId: string) {
+    if (!canManageQueue) return;
     const nextQueue = playQueue.filter((track) => track.videoId !== videoId);
     setPlayQueue(nextQueue);
     window.localStorage.setItem("bh_play_queue", JSON.stringify(nextQueue));
@@ -403,7 +410,7 @@ export default function YoutubePage() {
               </section>
               <section>
                 <div className="relative mb-2 text-center"><h3 className="font-bold">Hive Queue</h3><span className="absolute right-0 top-0 text-sm text-gray-500">{playQueue.length}</span></div>
-                {playQueue.length === 0 ? <p className="text-sm text-gray-500">Upvoted requests will play here.</p> : <DndContext sensors={sensors} onDragEnd={handleDragEnd}><SortableContext items={movableTrackIds} strategy={verticalListSortingStrategy}><div className="space-y-2">{playQueue.map((track, index) => <QueueTrackItem key={track.videoId} track={track} index={index} isPlaying={track.videoId === nowPlayingId} canReorder={index >= firstMovableIndex} showUpvoteCount={isHost} onRemove={removeTrack} onUpvote={upvoteHiveTrack} />)}</div></SortableContext></DndContext>}
+                {playQueue.length === 0 ? <p className="text-sm text-gray-500">Upvoted requests will play here.</p> : <DndContext sensors={sensors} onDragEnd={handleDragEnd}><SortableContext items={movableTrackIds} strategy={verticalListSortingStrategy}><div className="space-y-2">{playQueue.map((track, index) => <QueueTrackItem key={track.videoId} track={track} index={index} isPlaying={track.videoId === nowPlayingId} canReorder={canManageQueue && index >= firstMovableIndex} canRemove={canManageQueue} showUpvoteCount={canManageQueue} onRemove={removeTrack} onUpvote={upvoteHiveTrack} />)}</div></SortableContext></DndContext>}
               </section>
             </div>
           )}
