@@ -338,7 +338,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       </div>}
       {nowPlaying?.videoId && (
         <>
-          <div aria-hidden={isVideoHidden} className={`fixed bottom-4 right-4 z-50 h-[180px] w-[320px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-white/20 bg-black shadow-2xl transition-all ${isVideoHidden ? "pointer-events-none translate-x-[calc(100%+1rem)] opacity-0" : ""}`}>
+          <div aria-hidden={isVideoHidden} className={`fixed bottom-4 right-4 z-50 h-[112px] w-[200px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-white/20 bg-black shadow-2xl transition-all sm:h-[180px] sm:w-[320px] ${isVideoHidden ? "pointer-events-none translate-x-[calc(100%+1rem)] opacity-0" : ""}`}>
             <ReactPlayer
               ref={playerRef}
               src={`https://www.youtube.com/watch?v=${nowPlaying.videoId}`}
@@ -358,7 +358,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
               onEnded={handleTrackEnded}
             />
           </div>
-          {!isVideoHidden && <button onClick={() => setIsVideoHidden(true)} aria-label="Hide video player" title="Hide video player" className="fixed bottom-[calc(180px+1.25rem)] right-4 z-50 flex h-11 w-11 items-center justify-center rounded-lg border border-white/20 bg-black/85 text-white shadow-xl backdrop-blur hover:border-yellow-500 hover:text-yellow-500">
+          {!isVideoHidden && <button onClick={() => setIsVideoHidden(true)} aria-label="Hide video player" title="Hide video player" className="fixed bottom-[calc(112px+1.25rem)] right-4 z-50 flex h-10 w-10 items-center justify-center rounded-lg border border-white/20 bg-black/85 text-white shadow-xl backdrop-blur hover:border-yellow-500 hover:text-yellow-500 sm:bottom-[calc(180px+1.25rem)] sm:h-11 sm:w-11">
             <EyeOff size={19} />
           </button>}
           {isVideoHidden && <button onClick={() => setIsVideoHidden(false)} aria-label="Show video player" title="Show video player" className="fixed bottom-4 right-4 z-50 flex h-11 w-11 items-center justify-center rounded-lg border border-white/20 bg-black/85 text-white shadow-xl backdrop-blur hover:border-yellow-500 hover:text-yellow-500">

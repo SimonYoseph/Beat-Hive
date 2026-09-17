@@ -533,9 +533,9 @@ export default function YoutubePage() {
   if (status === "loading") return null;
 
   return (
-    <main className="min-h-[100dvh] bg-[#111] px-4 py-12 text-white sm:px-6">
+    <main className="min-h-[100dvh] bg-[#111] px-4 py-8 text-white sm:px-6 sm:py-12">
       <section className="mx-auto max-w-2xl">
-        <div className="mb-8 flex items-center gap-3">
+        <div className="mb-6 flex items-center gap-3 sm:mb-8">
           <NextLink href="/" title="Back to Beat Hive" aria-label="Back to Beat Hive" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/5 text-gray-300 transition-colors hover:bg-yellow-500 hover:text-black">
             <ArrowLeft size={20} />
           </NextLink>
