@@ -1051,9 +1051,8 @@ export default function BeatHiveApp() {
           {!showSettings && (
             <button
               onClick={() => setShowSettings(true)}
-              className="absolute z-50 w-14 h-14 bg-gradient-to-br from-yellow-400 to-yellow-500 hover:from-yellow-300 hover:to-yellow-400 transition-all duration-300 flex items-center justify-center shape-octagon shadow-lg shadow-yellow-500/30 active:scale-95"
+              className="absolute left-2 z-50 h-10 w-10 bg-gradient-to-br from-yellow-400 to-yellow-500 hover:from-yellow-300 hover:to-yellow-400 transition-all duration-300 flex items-center justify-center [clip-path:polygon(50%_0%,100%_25%,100%_75%,50%_100%,0%_75%,0%_25%)] shadow-lg shadow-yellow-500/30 active:scale-95 sm:left-8 sm:h-14 sm:w-14"
               aria-label="Open profile settings"
-              style={{ left: '2rem' }}
             >
               {customIcon ? (
                 // eslint-disable-next-line @next/next/no-img-element
