@@ -13,31 +13,42 @@ function readRoomCode(value: string) {
   }
 }
 
+type JoinedRoom = {
+  code: string;
+  hostName: string;
+  hostEmail: string;
+  roomName: string;
+};
+
 export default function JoinRoomPage() {
   const router = useRouter();
   const [roomInput, setRoomInput] = useState("");
   const [message, setMessage] = useState("");
 
-  useEffect(() => {
-    const roomCode = new URLSearchParams(window.location.search).get("room");
-    if (!roomCode) return;
-    window.localStorage.setItem("bh_joinedRoomCode", roomCode);
+  function enterRoom(room: JoinedRoom) {
+    window.localStorage.setItem("bh_joinedRoom", JSON.stringify(room));
+    window.localStorage.setItem("bh_joinedRoomCode", room.code);
     window.localStorage.setItem("bh_hasAccess", JSON.stringify(true));
     window.localStorage.setItem("bh_userRole", JSON.stringify("guest"));
-    router.replace("/");
+    router.push("/");
+  }
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const roomCode = params.get("room");
+    if (!roomCode) return;
+    enterRoom({ code: roomCode, hostName: params.get("host") || "Hive Host", hostEmail: params.get("hostEmail") || "", roomName: params.get("roomName") || "Beat Hive Room" });
   }, [router]);
 
   function joinRoom(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const roomCode = readRoomCode(roomInput);
-    if (!roomCode) {
-      setMessage("Paste a valid room link or code.");
+    if (!roomCode || !roomInput.includes("?room=")) {
+      setMessage("Paste the complete room link shared by your host.");
       return;
     }
-    window.localStorage.setItem("bh_joinedRoomCode", roomCode);
-    window.localStorage.setItem("bh_hasAccess", JSON.stringify(true));
-    window.localStorage.setItem("bh_userRole", JSON.stringify("guest"));
-    router.push("/");
+    const params = new URL(roomInput).searchParams;
+    enterRoom({ code: roomCode, hostName: params.get("host") || "Hive Host", hostEmail: params.get("hostEmail") || "", roomName: params.get("roomName") || "Beat Hive Room" });
   }
 
   return (

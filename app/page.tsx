@@ -294,6 +294,7 @@ export default function BeatHiveApp() {
   const [djQrExpanded, setDjQrExpanded] = usePersistedState('bh_djQrExpanded', false);
   const [roomName, setRoomName] = usePersistedState('bh_roomName', 'Friday Night Live');
   const [roomCode, setRoomCode] = usePersistedState('bh_roomCode', '');
+  const [joinedRoom] = usePersistedState<{ code: string; hostName: string; hostEmail: string; roomName: string } | null>('bh_joinedRoom', null);
   const [shareStatus, setShareStatus] = useState('');
 
   // Guest State
@@ -394,7 +395,9 @@ export default function BeatHiveApp() {
     window.scrollTo(0, 0);
   };
 
-  const roomLink = roomCode && typeof window !== 'undefined' ? `${window.location.origin}/join?room=${encodeURIComponent(roomCode)}` : '';
+  const roomLink = roomCode && typeof window !== 'undefined'
+    ? `${window.location.origin}/join?${new URLSearchParams({ room: roomCode, host: session?.user?.name || 'Hive Host', hostEmail: userEmail || '', roomName }).toString()}`
+    : '';
 
   const copyRoomLink = async () => {
     if (!roomLink) return;
@@ -1007,6 +1010,8 @@ export default function BeatHiveApp() {
             <p className="text-xs text-yellow-500/80 uppercase tracking-widest font-bold">Live Queue Control</p>
           </header>
         </div>
+
+        {userRole === 'guest' && joinedRoom && <div className="mb-4 flex items-center justify-center gap-2 rounded-lg border border-yellow-500/20 bg-yellow-500/5 px-3 py-2 text-center text-xs text-yellow-100"><span className="h-2 w-2 shrink-0 rounded-full bg-yellow-500" />Connected to {joinedRoom.hostName}&apos;s room: {joinedRoom.roomName}</div>}
 
         {/* Currently Playing Card */}
         {nowPlaying && <div className="bg-[#1a1a1a] rounded-2xl p-4 mb-4 border border-white/5 relative overflow-hidden shadow-xl drop-shadow-2xl z-10 shrink-0 w-full mx-auto">
