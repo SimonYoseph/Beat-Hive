@@ -239,6 +239,7 @@ type SyncedSettings = {
 // Main Entry Component
 export default function BeatHiveApp() {
   const { data: session } = useSession();
+  const authProvider = (session as (typeof session & { provider?: string }) | null)?.provider;
   const { nowPlaying, isPlaying, setNowPlaying, setIsPlaying } = usePlayback();
   const userEmail = session?.user?.email;
     // YouTube search state
@@ -270,6 +271,10 @@ export default function BeatHiveApp() {
   const [musicSource, setMusicSource] = usePersistedState<'spotify' | 'apple' | 'youtube' | null>('bh_musicSource', null);
   const [customIcon, setCustomIcon] = usePersistedState<string | null>('bh_customIcon', null);
   const customIconInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (authProvider === 'google' && musicSource === null) setMusicSource('youtube');
+  }, [authProvider, musicSource, setMusicSource]);
 
   // DJ State
   const [djRoomActive, setDjRoomActive] = usePersistedState('bh_djRoomActive', false);
@@ -1117,8 +1122,10 @@ export default function BeatHiveApp() {
                       >
                                         <button 
                                           onClick={async () => {
-                                            if (musicSource !== 'youtube') {
-                                              // Prompt Google login for YouTube
+                                            if (session) {
+                                              setMusicSource('youtube');
+                                              window.location.href = '/youtube';
+                                            } else if (musicSource !== 'youtube') {
                                               await signIn('google', { callbackUrl: '/youtube' });
                                               setMusicSource('youtube');
                                             } else {
