@@ -18,6 +18,13 @@ body {
   -webkit-touch-callout: none;
 }
 
+img,
+video,
+canvas,
+svg {
+  max-width: 100%;
+}
+
 youtube-video {
   min-width: 0 !important;
   min-height: 0 !important;
