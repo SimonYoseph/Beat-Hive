@@ -36,6 +36,7 @@ import {
   Flame,
   SkipBack,
   SkipForward,
+  ShieldAlert,
   Volume1,
 } from "lucide-react";
 import { signIn, signOut, useSession } from "next-auth/react";
@@ -798,10 +799,10 @@ export default function BeatHiveApp() {
 
             <button
               onClick={() => setDjPreviewingGuest(true)}
-              className="w-full bg-[#1a1a1a] hover:bg-[#222] border border-yellow-500/30 text-yellow-500 py-3 rounded-xl flex items-center justify-center gap-2 font-bold transition-colors shadow-lg"
+              className="w-full rounded-xl border-2 border-yellow-300 bg-yellow-500 py-3.5 font-black text-black shadow-[0_0_0_3px_rgba(245,158,11,.18),0_12px_30px_rgba(245,158,11,.22)] transition-all hover:bg-yellow-400 active:scale-[.98] flex items-center justify-center gap-2"
             >
-              <Users size={18} />
-              Switch to Guest View
+              <ShieldAlert size={19} />
+              Switch to Hive View
             </button>
 
             {isMasterAccount && <NextLink href="/youtube" className="w-full bg-[#1a1a1a] hover:bg-[#222] border border-white/10 text-white py-3 rounded-xl flex items-center justify-center gap-2 font-bold transition-colors">
@@ -1103,10 +1104,10 @@ export default function BeatHiveApp() {
           <div className="flex justify-center mb-8 shrink-0 relative z-20">
             <button 
               onClick={() => setDjPreviewingGuest(false)}
-              className="bg-yellow-500 hover:bg-yellow-400 text-black px-5 py-2.5 rounded-full font-bold text-sm shadow-[0_10px_30px_rgba(245,158,11,0.3)] flex items-center justify-center gap-2 active:scale-95 transition-all w-48"
+              className="w-full max-w-xs rounded-xl border-2 border-yellow-300 bg-yellow-500 px-5 py-3 font-black text-sm text-black shadow-[0_0_0_3px_rgba(245,158,11,.18),0_12px_30px_rgba(245,158,11,.22)] flex items-center justify-center gap-2 transition-all hover:bg-yellow-400 active:scale-[.98]"
             >
-              <Settings2 size={16} />
-              Return to Dashboard
+              <ShieldAlert size={17} />
+              Return to Hive Host View
             </button>
           </div>
         )}
