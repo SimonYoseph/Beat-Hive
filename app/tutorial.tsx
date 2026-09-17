@@ -160,7 +160,7 @@ export function Tutorial({ role }: { role: TutorialRole }) {
   return (
     <div className="fixed inset-0 z-[10000]" role="dialog" aria-modal="true" aria-labelledby="tutorial-title">
       {targetBounds && <div className="pointer-events-none fixed z-0 rounded-2xl border-2 border-yellow-400" style={{ top: targetBounds.top, left: targetBounds.left, width: targetBounds.width, height: targetBounds.height, boxShadow: "0 0 0 9999px rgba(0, 0, 0, 0.76)" }} />}
-      {!targetBounds && <div className="pointer-events-none fixed inset-0 z-0 bg-black/75" />}
+      {!targetBounds && !isWelcome && <div className="pointer-events-none fixed inset-0 z-0 bg-black/75" />}
       <section className={`fixed z-10 w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-lg border border-white/10 bg-[#111214] shadow-[0_24px_80px_rgba(0,0,0,0.55)] ${targetBounds ? "" : "bottom-4 left-4 sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2"}`} style={tutorialCardStyle}>
         <div className="p-5 sm:p-6">
           <div className="flex items-center justify-between gap-4">
