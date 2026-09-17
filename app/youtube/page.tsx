@@ -1,6 +1,6 @@
 "use client";
 
-import { DndContext, DragEndEvent, PointerSensor, useDroppable, useSensor, useSensors } from "@dnd-kit/core";
+import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, PointerSensor, useDroppable, useSensor, useSensors } from "@dnd-kit/core";
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { ArrowLeft, ChevronDown, ChevronUp, History, ListMusic, LoaderCircle, Menu, Music2, Plus, Search, ThumbsUp, Trash2 } from "lucide-react";
@@ -54,7 +54,7 @@ function QueueTrackItem({ track, index, isPlaying, canReorder, canRemove, showUp
   });
 
   return (
-    <article ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={`flex items-center gap-3 rounded-lg bg-[#1b1b1b] p-3 ${isDragging ? "opacity-40" : ""}`}>
+    <article ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition: isDragging ? undefined : transition }} className={`flex items-center gap-3 rounded-lg bg-[#1b1b1b] p-3 will-change-transform ${isDragging ? "opacity-40" : ""}`}>
       <span className="w-5 text-center text-sm font-bold text-yellow-500">{index + 1}</span>
       {track.thumbnail && (
         // eslint-disable-next-line @next/next/no-img-element
@@ -86,7 +86,7 @@ function RequestTrackItem({ track, onRemove }: { track: RequestedTrack; onRemove
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: `request-${track.videoId}` });
 
   return (
-    <article ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={`flex items-center gap-2 rounded-lg bg-[#1b1b1b] p-3 ${isDragging ? "opacity-40" : ""}`}>
+    <article ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition: isDragging ? undefined : transition }} className={`flex items-center gap-2 rounded-lg bg-[#1b1b1b] p-3 will-change-transform ${isDragging ? "opacity-40" : ""}`}>
       <div className="min-w-0 flex-1"><h4 className="truncate font-bold">{track.title}</h4><p className="truncate text-sm text-gray-400">{track.channelTitle}</p></div>
       <button type="button" className="flex h-8 w-8 touch-none cursor-grab items-center justify-center rounded bg-white/5 text-gray-300 hover:bg-yellow-500 hover:text-black active:cursor-grabbing" aria-label={`Drag ${track.title} to reorder`} title="Drag to reorder" {...attributes} {...listeners}><Menu size={18} /></button>
       <button onClick={() => onRemove(track.videoId)} className="flex h-8 w-8 items-center justify-center rounded bg-white/5 text-gray-400 hover:bg-red-500 hover:text-white" aria-label={`Remove ${track.title} from requests`} title="Remove request"><Trash2 size={14} /></button>
@@ -98,6 +98,10 @@ function HiveQueueDropZone({ children }: { children: React.ReactNode }) {
   const { isOver, setNodeRef } = useDroppable({ id: "hive-queue" });
 
   return <div ref={setNodeRef} className={`rounded-lg transition-colors ${isOver ? "bg-yellow-500/10" : ""}`}>{children}</div>;
+}
+
+function DragTrackOverlay({ track }: { track: RequestedTrack }) {
+  return <div className="flex w-72 items-center gap-3 rounded-lg border border-yellow-500/60 bg-[#202020] p-3 text-white shadow-2xl"><Menu size={18} className="text-yellow-500" /><div className="min-w-0"><p className="truncate font-bold">{track.title}</p><p className="truncate text-sm text-gray-400">{track.channelTitle}</p></div></div>;
 }
 
 export default function YoutubePage() {
@@ -117,6 +121,7 @@ export default function YoutubePage() {
   const [isQueueCollapsed, setIsQueueCollapsed] = useState(false);
   const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
   const [isHost, setIsHost] = useState(false);
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const isMasterAccount = session?.user?.email?.toLowerCase() === MASTER_CONTROL_EMAIL;
   const canManageQueue = isMasterAccount || isHost;
   const searchFormRef = useRef<HTMLFormElement>(null);
@@ -330,6 +335,10 @@ export default function YoutubePage() {
     window.localStorage.setItem("bh_play_queue", JSON.stringify(nextQueue));
   }
 
+  function handleQueueDragStart(event: DragStartEvent) {
+    setActiveDragId(String(event.active.id));
+  }
+
   function removeTrack(videoId: string) {
     if (!canManageQueue) return;
     const nextQueue = playQueue.filter((track) => track.videoId !== videoId);
@@ -409,6 +418,9 @@ export default function YoutubePage() {
   const activeTrackIndex = playQueue.findIndex((track) => track.videoId === nowPlayingId);
   const firstMovableIndex = activeTrackIndex >= 0 ? activeTrackIndex + 1 : 0;
   const movableTrackIds = playQueue.slice(firstMovableIndex).map((track) => track.videoId);
+  const activeDragTrack = activeDragId?.startsWith("request-")
+    ? requestTracks.find((track) => `request-${track.videoId}` === activeDragId)
+    : playQueue.find((track) => track.videoId === activeDragId);
 
   if (status === "loading") return null;
 
@@ -446,7 +458,7 @@ export default function YoutubePage() {
             </button>
           </div>
           {!isQueueCollapsed && (
-            <DndContext sensors={sensors} onDragEnd={handleQueueDragEnd}><div className="grid gap-6 md:grid-cols-2">
+            <DndContext sensors={sensors} onDragStart={handleQueueDragStart} onDragCancel={() => setActiveDragId(null)} onDragEnd={(event) => { setActiveDragId(null); handleQueueDragEnd(event); }}><div className="grid gap-6 md:grid-cols-2">
               <section>
                 <div className="relative mb-2 text-center"><h3 className="font-bold">Your queue</h3><span className="absolute right-0 top-0 text-sm text-gray-500">{requestTracks.length}</span></div>
                 {requestTracks.length === 0 ? <p className="text-sm text-gray-500">Songs you request will appear here.</p> : <SortableContext items={requestTracks.map((track) => `request-${track.videoId}`)} strategy={verticalListSortingStrategy}><div className="space-y-2">{requestTracks.map((track) => <RequestTrackItem key={track.videoId} track={track} onRemove={removeRequest} />)}</div></SortableContext>}
@@ -455,7 +467,7 @@ export default function YoutubePage() {
                 <div className="relative mb-2 text-center"><h3 className="font-bold">Hive Queue</h3><span className="absolute right-0 top-0 text-sm text-gray-500">{playQueue.length}</span></div>
                 <HiveQueueDropZone>{playQueue.length === 0 ? <p className="p-3 text-sm text-gray-500">Upvoted requests will play here.</p> : <SortableContext items={movableTrackIds} strategy={verticalListSortingStrategy}><div className="space-y-2">{playQueue.map((track, index) => <QueueTrackItem key={track.videoId} track={track} index={index} isPlaying={track.videoId === nowPlayingId} canReorder={canManageQueue && index >= firstMovableIndex} canRemove={canManageQueue} showUpvoteCount={canManageQueue} onRemove={removeTrack} onUpvote={upvoteHiveTrack} />)}</div></SortableContext>}</HiveQueueDropZone>
               </section>
-            </div></DndContext>
+            </div><DragOverlay dropAnimation={null}>{isMasterAccount && activeDragTrack && <DragTrackOverlay track={activeDragTrack} />}</DragOverlay></DndContext>
           )}
         </section>
 
