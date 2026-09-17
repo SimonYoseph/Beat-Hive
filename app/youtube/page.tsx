@@ -75,10 +75,9 @@ function QueueTrackItem({ track, index, isPlaying, canReorder, canRemove, canCon
       )}
       <div className="min-w-0 flex-1">
         <h3 className="truncate font-bold">{track.title}</h3>
-        <p className="truncate text-sm text-gray-400">{track.channelTitle}</p>
+        <div className="flex items-center gap-2"><p className="min-w-0 truncate text-sm text-gray-400">{track.channelTitle}</p>{isPlaying && <span className="shrink-0 text-xs font-bold text-yellow-500">Playing</span>}</div>
       </div>
-      <div className="flex shrink-0 items-center gap-2">
-        {isPlaying && <span className="text-xs font-bold text-yellow-500">Playing</span>}
+      <div className="flex shrink-0 items-center gap-1 sm:gap-2">
         {canControlPlayback && <button onClick={() => onPlayNow(track)} className="flex h-8 w-8 items-center justify-center rounded bg-emerald-500/20 text-emerald-300 hover:bg-emerald-400 hover:text-black" aria-label={`Play ${track.title} now`} title="Play now"><Play size={15} fill="currentColor" /></button>}
         {canControlPlayback && <button onClick={() => onMoveToTop(track.videoId)} className="flex h-8 w-8 items-center justify-center rounded bg-white/5 text-gray-300 hover:bg-emerald-400 hover:text-black" aria-label={`Move ${track.title} to top of queue`} title="Move to top"><ArrowUp size={15} /></button>}
         <button onClick={() => onUpvote(track.videoId)} className={`flex h-8 items-center justify-center rounded bg-white/5 text-sm text-gray-300 hover:bg-yellow-500 hover:text-black ${showUpvoteCount ? "gap-1 px-2" : "w-8"}`} aria-label={`Upvote ${track.title}`} title="Upvote">
