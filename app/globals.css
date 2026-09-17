@@ -18,6 +18,11 @@ body {
   -webkit-touch-callout: none;
 }
 
+youtube-video {
+  min-width: 0 !important;
+  min-height: 0 !important;
+}
+
 /* Smooth custom scrolling for touch devices */
 .stylish-scrollbar {
   -webkit-overflow-scrolling: touch;
