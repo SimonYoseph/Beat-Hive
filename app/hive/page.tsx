@@ -56,7 +56,12 @@ export default function HivePage() {
   const globeCanvasRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setCustomIcon(window.localStorage.getItem("bh_customIcon"));
+    try {
+      const storedIcon = window.localStorage.getItem("bh_customIcon");
+      setCustomIcon(storedIcon ? JSON.parse(storedIcon) as string | null : null);
+    } catch {
+      setCustomIcon(null);
+    }
   }, []);
 
   useEffect(() => {
@@ -169,10 +174,10 @@ export default function HivePage() {
           <Link href="/" aria-label="Return to party controls" className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-gray-300 transition-colors hover:border-yellow-500/50 hover:text-yellow-500">
             <ArrowLeft size={20} />
           </Link>
-          <div className="text-center">
+          <Link href="/" aria-label="Return to Beat Hive" className="text-center">
             <div className="flex items-center justify-center gap-2 text-xl font-black"><span>Beat</span><span className="text-yellow-500">Hive</span></div>
             <p className="text-[10px] font-bold uppercase tracking-widest text-yellow-500/80">Friday Night Live</p>
-          </div>
+          </Link>
           <div className="flex h-11 min-w-11 items-center justify-center rounded-xl border border-yellow-500/30 bg-yellow-500/10 px-3 text-sm font-bold text-yellow-500">
             <Users size={17} className="mr-1.5" /> {members.length}
           </div>

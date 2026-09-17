@@ -7,6 +7,7 @@ import { ArrowLeft, ChevronDown, ChevronUp, History, ListMusic, LoaderCircle, Me
 import NextLink from "next/link";
 import { signIn, useSession } from "next-auth/react";
 import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
+import { usePlayback } from "../playback-provider";
 
 type SearchResult = {
   id: { videoId: string };
@@ -80,6 +81,7 @@ function QueueTrackItem({ track, index, isPlaying, canReorder, showUpvoteCount, 
 
 export default function YoutubePage() {
   const { data: session, status } = useSession();
+  const { setIsPlaying, setNowPlaying } = usePlayback();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -238,10 +240,16 @@ export default function YoutubePage() {
       window.localStorage.setItem("bh_play_queue", JSON.stringify(nextPlayQueue));
     }
     if (!nowPlayingId) {
-      const nextTrack = nextPlayQueue[0] || queuedTrack;
+      if (!nextPlayQueue.some((track) => track.videoId === queuedTrack.videoId)) {
+        nextPlayQueue = [...nextPlayQueue, requestedTrack];
+        setPlayQueue(nextPlayQueue);
+        window.localStorage.setItem("bh_play_queue", JSON.stringify(nextPlayQueue));
+      }
+      const nextTrack = queuedTrack;
       window.localStorage.setItem("bh_now_playing", JSON.stringify(nextTrack));
-      window.localStorage.setItem("bh_queue_autoplay", "true");
       setNowPlayingId(nextTrack.videoId);
+      setNowPlaying(nextTrack);
+      setIsPlaying(true);
       window.dispatchEvent(new Event("bh-playback-change"));
     }
   }
