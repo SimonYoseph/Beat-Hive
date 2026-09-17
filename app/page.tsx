@@ -304,6 +304,7 @@ export default function BeatHiveApp() {
   const [joinedRoom] = usePersistedState<{ code: string; hostName: string; hostEmail: string; roomName: string } | null>('bh_joinedRoom', null);
   const [shareStatus, setShareStatus] = useState('');
   const [newRequestCount, setNewRequestCount] = useState(0);
+  const hasSeededActiveSession = useRef(false);
 
   // Guest State
   const [qrExpanded, setQrExpanded] = usePersistedState('bh_qrExpanded', false);
@@ -344,6 +345,26 @@ export default function BeatHiveApp() {
       window.removeEventListener('bh-playback-change', loadRequestCount);
     };
   }, []);
+
+  useEffect(() => {
+    if (userRole !== 'dj' || !djRoomActive || hasSeededActiveSession.current) return;
+
+    try {
+      const requests = JSON.parse(window.localStorage.getItem('bh_youtube_requests') || '[]') as unknown[];
+      const queue = JSON.parse(window.localStorage.getItem('bh_play_queue') || '[]') as unknown[];
+      if (requests.length === 0 && queue.length === 0) {
+        window.localStorage.setItem('bh_youtube_requests', JSON.stringify(TEST_SESSION_TRACKS));
+        window.localStorage.setItem('bh_play_queue', JSON.stringify(TEST_SESSION_TRACKS));
+        window.dispatchEvent(new Event('bh-playback-change'));
+      }
+    } catch {
+      window.localStorage.setItem('bh_youtube_requests', JSON.stringify(TEST_SESSION_TRACKS));
+      window.localStorage.setItem('bh_play_queue', JSON.stringify(TEST_SESSION_TRACKS));
+      window.dispatchEvent(new Event('bh-playback-change'));
+    } finally {
+      hasSeededActiveSession.current = true;
+    }
+  }, [djRoomActive, userRole]);
 
   useEffect(() => {
     let isCurrent = true;
