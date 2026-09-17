@@ -196,7 +196,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
             <button onClick={() => setIsMasterPanelOpen(false)} aria-label="Close master control options" title="Close master control options" className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-white/10 hover:text-white">x</button>
           </div>
           <button onClick={toggleMasterControl} role="switch" aria-checked={isMasterControlEnabled} title={isMasterControlEnabled ? "Switch to Hive User control" : "Switch to Master Control"} className={`flex h-9 w-full items-center justify-between rounded px-3 text-xs font-bold transition-colors ${isMasterControlEnabled ? "bg-yellow-500 text-black" : "bg-white/10 text-white"}`}>
-            <span>{isMasterControlEnabled ? "Master Control" : "Hive User"}</span><span className={`h-3 w-3 rounded-full ${isMasterControlEnabled ? "bg-black" : "bg-gray-500"}`} />
+            <span>Hive User Mode</span><span className={`h-3 w-3 rounded-full ${isMasterControlEnabled ? "bg-black" : "bg-gray-500"}`} />
           </button>
           {isMasterControlEnabled && <>
             <div className="mt-2 grid grid-cols-3 gap-2">
