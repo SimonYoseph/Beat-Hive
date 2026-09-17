@@ -75,22 +75,25 @@ function QueueTrackItem({ track, index, isPlaying, canReorder, canRemove, canCon
       )}
       <div className="min-w-0 flex-1">
         <h3 className="truncate font-bold">{track.title}</h3>
-        <div className="flex items-center gap-2"><p className="min-w-0 truncate text-sm text-gray-400">{track.channelTitle}</p>{isPlaying && <span className="shrink-0 text-xs font-bold text-yellow-500">Playing</span>}</div>
+        <p className="truncate text-sm text-gray-400">{track.channelTitle}</p>
       </div>
-      <div className="flex shrink-0 items-center gap-1 sm:gap-2">
-        {canControlPlayback && <button onClick={() => onPlayNow(track)} className="flex h-8 w-8 items-center justify-center rounded bg-emerald-500/20 text-emerald-300 hover:bg-emerald-400 hover:text-black" aria-label={`Play ${track.title} now`} title="Play now"><Play size={15} fill="currentColor" /></button>}
-        {canControlPlayback && <button onClick={() => onMoveToTop(track.videoId)} className="flex h-8 w-8 items-center justify-center rounded bg-white/5 text-gray-300 hover:bg-emerald-400 hover:text-black" aria-label={`Move ${track.title} to top of queue`} title="Move to top"><ArrowUp size={15} /></button>}
-        <button onClick={() => onUpvote(track.videoId)} className={`flex h-8 items-center justify-center rounded bg-white/5 text-sm text-gray-300 hover:bg-yellow-500 hover:text-black ${showUpvoteCount ? "gap-1 px-2" : "w-8"}`} aria-label={`Upvote ${track.title}`} title="Upvote">
-          <ThumbsUp size={15} /> {showUpvoteCount && track.upvotes}
-        </button>
-        {canReorder && (
-          <button type="button" className="flex h-8 w-8 touch-none cursor-grab items-center justify-center rounded bg-white/5 text-gray-300 hover:bg-yellow-500 hover:text-black active:cursor-grabbing" aria-label={`Drag ${track.title} to reorder`} title="Drag to reorder" {...attributes} {...listeners}>
-            <Menu size={18} />
+      <div className="flex shrink-0 flex-col items-end gap-1">
+        {isPlaying && <span className="text-xs font-bold text-yellow-500">Playing</span>}
+        <div className="flex items-center gap-1 sm:gap-2">
+          {canControlPlayback && <button onClick={() => onPlayNow(track)} className="flex h-8 w-8 items-center justify-center rounded bg-emerald-500/20 text-emerald-300 hover:bg-emerald-400 hover:text-black" aria-label={`Play ${track.title} now`} title="Play now"><Play size={15} fill="currentColor" /></button>}
+          {canControlPlayback && <button onClick={() => onMoveToTop(track.videoId)} className="flex h-8 w-8 items-center justify-center rounded bg-white/5 text-gray-300 hover:bg-emerald-400 hover:text-black" aria-label={`Move ${track.title} to top of queue`} title="Move to top"><ArrowUp size={15} /></button>}
+          <button onClick={() => onUpvote(track.videoId)} className={`flex h-8 items-center justify-center rounded bg-white/5 text-sm text-gray-300 hover:bg-yellow-500 hover:text-black ${showUpvoteCount ? "gap-1 px-2" : "w-8"}`} aria-label={`Upvote ${track.title}`} title="Upvote">
+            <ThumbsUp size={15} /> {showUpvoteCount && track.upvotes}
           </button>
-        )}
-        {canRemove && <button onClick={() => onRemove(track.videoId)} className="flex h-7 w-7 items-center justify-center rounded bg-white/5 text-gray-400 hover:bg-red-500 hover:text-white" aria-label={`Remove ${track.title} from queue`} title="Remove from queue">
-          <Trash2 size={14} />
-        </button>}
+          {canReorder && (
+            <button type="button" className="flex h-8 w-8 touch-none cursor-grab items-center justify-center rounded bg-white/5 text-gray-300 hover:bg-yellow-500 hover:text-black active:cursor-grabbing" aria-label={`Drag ${track.title} to reorder`} title="Drag to reorder" {...attributes} {...listeners}>
+              <Menu size={18} />
+            </button>
+          )}
+          {canRemove && <button onClick={() => onRemove(track.videoId)} className="flex h-7 w-7 items-center justify-center rounded bg-white/5 text-gray-400 hover:bg-red-500 hover:text-white" aria-label={`Remove ${track.title} from queue`} title="Remove from queue">
+            <Trash2 size={14} />
+          </button>}
+        </div>
       </div>
     </article>
   );
