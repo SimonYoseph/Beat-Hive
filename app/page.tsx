@@ -32,6 +32,7 @@ import {
   Pause,
   Play,
   Flame,
+  SkipBack,
   SkipForward,
   Volume1,
 } from "lucide-react";
@@ -64,6 +65,8 @@ const HIVE_ITEMS = [
   { id: 'shoutout', title: "Shoutout", description: "Send a message to the Hive Host", icon: <MessageSquare size={32} /> },
   { id: 'tip', title: "Tip Hive Host", description: "Show some love with a direct tip", icon: <Heart size={32} /> },
 ];
+
+const MASTER_CONTROL_EMAIL = 'simon97862012@gmail.com';
 
 const TOTAL_TILES = 32; // Exactly 32 panels on a standard soccer ball
 const RADIUS = 185; // Perfectly tuned to avoid overlapping with 106px shapes
@@ -363,6 +366,10 @@ export default function BeatHiveApp() {
   };
 
   const handleStartDJRoom = () => {
+    if (!userEmail) {
+      alert('Sign in before starting a DJ room.');
+      return;
+    }
     setIsPartyCreator(true);
     setDjRoomActive(true);
     window.scrollTo(0, 0);
@@ -386,6 +393,7 @@ export default function BeatHiveApp() {
   };
 
   const handleNextTrack = () => {
+    if (!isMasterController) return;
     try {
       const queue = JSON.parse(window.localStorage.getItem('bh_play_queue') || '[]') as NowPlayingTrack[];
       const currentIndex = queue.findIndex((track) => track.videoId === nowPlaying?.videoId);
@@ -397,6 +405,23 @@ export default function BeatHiveApp() {
       setIsPlaying(true);
     } catch {
       // Keep the current track active if the queue cannot be read.
+    }
+  };
+
+  const handlePreviousTrack = () => {
+    if (!isMasterController) return;
+    try {
+      const queue = JSON.parse(window.localStorage.getItem('bh_play_queue') || '[]') as NowPlayingTrack[];
+      const currentIndex = queue.findIndex((track) => track.videoId === nowPlaying?.videoId);
+      const history = JSON.parse(window.localStorage.getItem('bh_play_history') || '[]') as NowPlayingTrack[];
+      const previousTrack = currentIndex > 0 ? queue[currentIndex - 1] : history.filter((track) => track.videoId !== nowPlaying?.videoId).at(-1);
+      if (!previousTrack) return;
+
+      window.localStorage.setItem('bh_now_playing', JSON.stringify(previousTrack));
+      setNowPlaying(previousTrack);
+      setIsPlaying(true);
+    } catch {
+      // Keep the current track active if playback history cannot be read.
     }
   };
 
@@ -646,6 +671,8 @@ export default function BeatHiveApp() {
     );
   }
 
+  const isMasterAccount = userEmail?.toLowerCase() === MASTER_CONTROL_EMAIL;
+
   // State 3A: DJ Mode (Room Setup & Dashboard)
   if (userRole === 'dj') {
     if (!djRoomActive) {
@@ -801,7 +828,7 @@ export default function BeatHiveApp() {
   }
 
   // State 3B: Guest flow - scan QR
-  if (userRole === 'guest' && !hasAccess) {
+  if (userRole === 'guest' && !hasAccess && !isMasterAccount) {
     return (
       <main className="min-h-[100dvh] flex flex-col items-center justify-center p-6 text-center bg-[#111]">
         <div className="max-w-md w-full flex flex-col items-center space-y-8 bg-[#1a1a1a] p-8 rounded-3xl shadow-2xl border border-yellow-500/20 relative">
@@ -880,6 +907,21 @@ export default function BeatHiveApp() {
     );
   }
 
+  const isMasterController = isMasterAccount;
+  const canManageRoom = isMasterAccount || isPartyCreator;
+
+  const hasPreviousTrack = (() => {
+    try {
+      const queue = JSON.parse(window.localStorage.getItem('bh_play_queue') || '[]') as NowPlayingTrack[];
+      const currentIndex = queue.findIndex((track) => track.videoId === nowPlaying?.videoId);
+      if (currentIndex > 0) return true;
+      const history = JSON.parse(window.localStorage.getItem('bh_play_history') || '[]') as NowPlayingTrack[];
+      return history.some((track) => track.videoId !== nowPlaying?.videoId);
+    } catch {
+      return false;
+    }
+  })();
+
   const hasNextQueuedTrack = (() => {
     try {
       const queue = JSON.parse(window.localStorage.getItem('bh_play_queue') || '[]') as NowPlayingTrack[];
@@ -943,7 +985,17 @@ export default function BeatHiveApp() {
               <h2 className="font-bold text-sm leading-tight text-white truncate">{nowPlaying.title}</h2>
               <p className="text-[10px] text-yellow-500 font-semibold truncate mt-0.5">{nowPlaying.channelTitle}</p>
             </div>
-            {userRole === 'dj' && <>
+            {isMasterController && <>
+              <motion.button
+                whileTap={{ scale: 0.9 }}
+                onClick={handlePreviousTrack}
+                disabled={!hasPreviousTrack}
+                title="Play previous song"
+                aria-label="Play previous song"
+                className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-gray-200 hover:bg-yellow-500 hover:text-black transition-colors shrink-0 disabled:bg-[#222] disabled:text-gray-600 disabled:cursor-not-allowed"
+              >
+                <SkipBack size={14} fill="currentColor" />
+              </motion.button>
               <motion.button
                 whileTap={{ scale: 0.9 }}
                 onClick={() => setIsPlaying(!isPlaying)}
@@ -1093,7 +1145,7 @@ export default function BeatHiveApp() {
                     </button>
                   )}
                 </div>
-                {isPartyCreator && <div>
+                {canManageRoom && <div>
                   <h3 className="mb-3 text-sm font-bold uppercase tracking-widest text-gray-400">View As</h3>
                   <div className="grid grid-cols-2 rounded-xl border border-white/10 bg-[#111] p-1">
                     <button onClick={() => { setUserRole('guest'); setShowSettings(false); }} className={`flex items-center justify-center gap-2 rounded-lg py-3 text-sm font-bold transition-colors ${userRole === 'guest' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-white'}`} aria-pressed={userRole === 'guest'}>
