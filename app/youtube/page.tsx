@@ -1,6 +1,6 @@
 "use client";
 
-import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
+import { DndContext, DragEndEvent, PointerSensor, useDroppable, useSensor, useSensors } from "@dnd-kit/core";
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { ArrowLeft, ChevronDown, ChevronUp, History, ListMusic, LoaderCircle, Menu, Music2, Plus, Search, ThumbsUp, Trash2 } from "lucide-react";
@@ -92,6 +92,12 @@ function RequestTrackItem({ track, onRemove }: { track: RequestedTrack; onRemove
       <button onClick={() => onRemove(track.videoId)} className="flex h-8 w-8 items-center justify-center rounded bg-white/5 text-gray-400 hover:bg-red-500 hover:text-white" aria-label={`Remove ${track.title} from requests`} title="Remove request"><Trash2 size={14} /></button>
     </article>
   );
+}
+
+function HiveQueueDropZone({ children }: { children: React.ReactNode }) {
+  const { isOver, setNodeRef } = useDroppable({ id: "hive-queue" });
+
+  return <div ref={setNodeRef} className={`rounded-lg transition-colors ${isOver ? "bg-yellow-500/10" : ""}`}>{children}</div>;
 }
 
 export default function YoutubePage() {
@@ -283,23 +289,35 @@ export default function YoutubePage() {
     window.localStorage.setItem("bh_youtube_requests", JSON.stringify(nextRequests));
   }
 
-  function handleRequestDragEnd(event: DragEndEvent) {
+  function handleQueueDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    const oldIndex = requestTracks.findIndex((track) => `request-${track.videoId}` === active.id);
-    const newIndex = requestTracks.findIndex((track) => `request-${track.videoId}` === over.id);
-    if (oldIndex < 0 || newIndex < 0) return;
+    const requestIndex = requestTracks.findIndex((track) => `request-${track.videoId}` === active.id);
+    if (requestIndex >= 0) {
+      const requestedTrack = requestTracks[requestIndex];
+      const targetHiveIndex = over.id === "hive-queue" ? playQueue.length : playQueue.findIndex((track) => track.videoId === over.id);
 
-    const nextRequests = arrayMove(requestTracks, oldIndex, newIndex);
-    setRequestTracks(nextRequests);
-    window.localStorage.setItem("bh_youtube_requests", JSON.stringify(nextRequests));
-  }
+      if (isMasterAccount && targetHiveIndex >= 0) {
+        const nextRequests = requestTracks.filter((_, index) => index !== requestIndex);
+        const nextPlayQueue = [...playQueue];
+        if (!nextPlayQueue.some((track) => track.videoId === requestedTrack.videoId)) nextPlayQueue.splice(targetHiveIndex, 0, requestedTrack);
+        setRequestTracks(nextRequests);
+        setPlayQueue(nextPlayQueue);
+        window.localStorage.setItem("bh_youtube_requests", JSON.stringify(nextRequests));
+        window.localStorage.setItem("bh_play_queue", JSON.stringify(nextPlayQueue));
+        return;
+      }
 
-  function handleDragEnd(event: DragEndEvent) {
+      const targetRequestIndex = requestTracks.findIndex((track) => `request-${track.videoId}` === over.id);
+      if (targetRequestIndex < 0) return;
+      const nextRequests = arrayMove(requestTracks, requestIndex, targetRequestIndex);
+      setRequestTracks(nextRequests);
+      window.localStorage.setItem("bh_youtube_requests", JSON.stringify(nextRequests));
+      return;
+    }
+
     if (!canManageQueue) return;
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
 
     const activeTrackIndex = playQueue.findIndex((track) => track.videoId === nowPlayingId);
     const firstMovableIndex = activeTrackIndex >= 0 ? activeTrackIndex + 1 : 0;
@@ -428,16 +446,16 @@ export default function YoutubePage() {
             </button>
           </div>
           {!isQueueCollapsed && (
-            <div className="grid gap-6 md:grid-cols-2">
+            <DndContext sensors={sensors} onDragEnd={handleQueueDragEnd}><div className="grid gap-6 md:grid-cols-2">
               <section>
                 <div className="relative mb-2 text-center"><h3 className="font-bold">Your queue</h3><span className="absolute right-0 top-0 text-sm text-gray-500">{requestTracks.length}</span></div>
-                {requestTracks.length === 0 ? <p className="text-sm text-gray-500">Songs you request will appear here.</p> : <DndContext sensors={sensors} onDragEnd={handleRequestDragEnd}><SortableContext items={requestTracks.map((track) => `request-${track.videoId}`)} strategy={verticalListSortingStrategy}><div className="space-y-2">{requestTracks.map((track) => <RequestTrackItem key={track.videoId} track={track} onRemove={removeRequest} />)}</div></SortableContext></DndContext>}
+                {requestTracks.length === 0 ? <p className="text-sm text-gray-500">Songs you request will appear here.</p> : <SortableContext items={requestTracks.map((track) => `request-${track.videoId}`)} strategy={verticalListSortingStrategy}><div className="space-y-2">{requestTracks.map((track) => <RequestTrackItem key={track.videoId} track={track} onRemove={removeRequest} />)}</div></SortableContext>}
               </section>
               <section>
                 <div className="relative mb-2 text-center"><h3 className="font-bold">Hive Queue</h3><span className="absolute right-0 top-0 text-sm text-gray-500">{playQueue.length}</span></div>
-                {playQueue.length === 0 ? <p className="text-sm text-gray-500">Upvoted requests will play here.</p> : <DndContext sensors={sensors} onDragEnd={handleDragEnd}><SortableContext items={movableTrackIds} strategy={verticalListSortingStrategy}><div className="space-y-2">{playQueue.map((track, index) => <QueueTrackItem key={track.videoId} track={track} index={index} isPlaying={track.videoId === nowPlayingId} canReorder={canManageQueue && index >= firstMovableIndex} canRemove={canManageQueue} showUpvoteCount={canManageQueue} onRemove={removeTrack} onUpvote={upvoteHiveTrack} />)}</div></SortableContext></DndContext>}
+                <HiveQueueDropZone>{playQueue.length === 0 ? <p className="p-3 text-sm text-gray-500">Upvoted requests will play here.</p> : <SortableContext items={movableTrackIds} strategy={verticalListSortingStrategy}><div className="space-y-2">{playQueue.map((track, index) => <QueueTrackItem key={track.videoId} track={track} index={index} isPlaying={track.videoId === nowPlayingId} canReorder={canManageQueue && index >= firstMovableIndex} canRemove={canManageQueue} showUpvoteCount={canManageQueue} onRemove={removeTrack} onUpvote={upvoteHiveTrack} />)}</div></SortableContext>}</HiveQueueDropZone>
               </section>
-            </div>
+            </div></DndContext>
           )}
         </section>
 
