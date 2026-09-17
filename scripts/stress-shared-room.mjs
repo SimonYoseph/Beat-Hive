@@ -11,7 +11,10 @@ const results = await Promise.all(Array.from({ length: attendees }, async () => 
   const response = await fetch(`${baseUrl.replace(/\/$/, "")}/api/rooms/${encodeURIComponent(roomCode)}`);
   return response.status;
 }));
-const statusCounts = Object.groupBy(results, String);
+const statusCounts = results.reduce((counts, status) => ({
+  ...counts,
+  [status]: (counts[status] || 0) + 1,
+}), {});
 
 console.log(JSON.stringify({ attendees, elapsedMs: Math.round(performance.now() - startedAt), statusCounts }, null, 2));
 
