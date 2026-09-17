@@ -78,7 +78,7 @@ function QueueTrackItem({ track, index, isPlaying, canReorder, canRemove, canCon
         <p className="truncate text-sm text-gray-400">{track.channelTitle}</p>
       </div>
       <div className="flex shrink-0 flex-col items-center gap-1">
-        {isPlaying && <span className="inline-flex items-center gap-1 text-xs font-bold text-red-400"><span aria-hidden="true" className="h-2 w-2 animate-pulse rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,.9)]" />Playing</span>}
+        {isPlaying && <span className="inline-flex items-center gap-1 text-xs font-bold text-red-400"><span aria-hidden="true" className="h-2 w-2 animate-pulse rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,.9)]" />Now Playing</span>}
         <div className="flex items-center gap-1 sm:gap-2">
           {canControlPlayback && <button onClick={() => onPlayNow(track)} className="flex h-8 w-8 items-center justify-center rounded bg-emerald-500/20 text-emerald-300 hover:bg-emerald-400 hover:text-black" aria-label={`Play ${track.title} now`} title="Play now"><Play size={15} fill="currentColor" /></button>}
           {canControlPlayback && <button onClick={() => onMoveToTop(track.videoId)} className="flex h-8 w-8 items-center justify-center rounded bg-white/5 text-gray-300 hover:bg-emerald-400 hover:text-black" aria-label={`Move ${track.title} to top of queue`} title="Move to top"><ArrowUp size={15} /></button>}
