@@ -763,6 +763,11 @@ export default function BeatHiveApp() {
               Switch to Guest View
             </button>
 
+            {isMasterAccount && <NextLink href="/youtube" className="w-full bg-[#1a1a1a] hover:bg-[#222] border border-white/10 text-white py-3 rounded-xl flex items-center justify-center gap-2 font-bold transition-colors">
+              <ListMusic size={18} className="text-yellow-500" />
+              Manage Hive Queue
+            </NextLink>}
+
             <div className="bg-white rounded-3xl p-6 flex flex-col items-center justify-center relative overflow-hidden shadow-xl">
              <button 
                 onClick={() => setDjQrExpanded(!djQrExpanded)} 
