@@ -206,7 +206,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
             </div>
           </>}
         </div>}
-        <button onPointerDown={handleMasterPointerDown} onPointerMove={handleMasterPointerMove} onPointerUp={handleMasterPointerUp} onClick={(event) => { if (masterDragCompletedRef.current) { event.preventDefault(); masterDragCompletedRef.current = false; return; } setIsMasterPanelOpen((open) => !open); }} aria-label="Master control options" title="Master control options" aria-expanded={isMasterPanelOpen} className={`flex h-11 touch-none cursor-grab items-center justify-center rounded-lg border border-red-400/70 bg-red-600 px-4 text-xs font-black tracking-wide text-white shadow-xl transition-all hover:-translate-y-0.5 hover:bg-red-500 active:translate-y-0 active:cursor-grabbing ${isMasterPanelOpen ? "ring-2 ring-red-300/70" : ""}`}>MASTER CONTROL</button>
+        {!isMasterPanelOpen && <button onPointerDown={handleMasterPointerDown} onPointerMove={handleMasterPointerMove} onPointerUp={handleMasterPointerUp} onClick={(event) => { if (masterDragCompletedRef.current) { event.preventDefault(); masterDragCompletedRef.current = false; return; } setIsMasterPanelOpen(true); }} aria-label="Master control options" title="Master control options" aria-expanded={false} className="flex h-11 touch-none cursor-grab items-center justify-center rounded-lg border border-red-400/70 bg-red-600 px-4 text-xs font-black tracking-wide text-white shadow-xl transition-all hover:-translate-y-0.5 hover:bg-red-500 active:translate-y-0 active:cursor-grabbing">MASTER CONTROL</button>}
       </div>}
       {nowPlaying?.videoId && (
         <>
