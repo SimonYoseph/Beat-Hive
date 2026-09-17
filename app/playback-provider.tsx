@@ -54,9 +54,12 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const [isMasterControlEnabled, setIsMasterControlEnabled] = useState(true);
   const [isMasterPanelOpen, setIsMasterPanelOpen] = useState(false);
   const [masterControlPosition, setMasterControlPosition] = useState({ x: 16, y: 16 });
+  const [masterControlSize, setMasterControlSize] = useState({ width: 158, height: 44 });
   const playerRef = useRef<HTMLVideoElement>(null);
   const masterDragRef = useRef<{ startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(null);
   const masterDragCompletedRef = useRef(false);
+  const masterResizeRef = useRef<{ startX: number; startY: number; width: number; height: number } | null>(null);
+  const masterControlSizeRef = useRef(masterControlSize);
   const isMasterAccount = session?.user?.email?.toLowerCase() === MASTER_CONTROL_EMAIL;
 
   function startPlayback() {
@@ -153,6 +156,27 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     masterDragRef.current = null;
   }
 
+  function handleMasterResizeStart(event: ReactPointerEvent<HTMLSpanElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    masterResizeRef.current = { startX: event.clientX, startY: event.clientY, width: masterControlSize.width, height: masterControlSize.height };
+  }
+
+  function handleMasterResizeMove(event: ReactPointerEvent<HTMLSpanElement>) {
+    const resize = masterResizeRef.current;
+    if (!resize) return;
+    const width = Math.min(window.innerWidth - masterControlPosition.x, Math.max(130, resize.width + event.clientX - resize.startX));
+    const height = Math.min(window.innerHeight - masterControlPosition.y, Math.max(44, resize.height + event.clientY - resize.startY));
+    masterControlSizeRef.current = { width, height };
+    setMasterControlSize({ width, height });
+  }
+
+  function handleMasterResizeEnd() {
+    if (masterResizeRef.current) window.localStorage.setItem("bh_masterControlSize", JSON.stringify(masterControlSizeRef.current));
+    masterResizeRef.current = null;
+  }
+
   useEffect(() => {
     refreshPlayback();
     const handlePlaybackChange = () => refreshPlayback();
@@ -162,6 +186,19 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("storage", handlePlaybackChange);
       window.removeEventListener("bh-playback-change", handlePlaybackChange);
     };
+  }, []);
+
+  useEffect(() => {
+    try {
+      const savedSize = JSON.parse(window.localStorage.getItem("bh_masterControlSize") || "null") as { width?: number; height?: number } | null;
+      if (typeof savedSize?.width === "number" && typeof savedSize.height === "number") {
+        const restoredSize = { width: savedSize.width, height: savedSize.height };
+        masterControlSizeRef.current = restoredSize;
+        setMasterControlSize(restoredSize);
+      }
+    } catch {
+      // Use the default size when the saved value cannot be read.
+    }
   }, []);
 
   useEffect(() => {
@@ -206,7 +243,10 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
             </div>
           </>}
         </div>}
-        {!isMasterPanelOpen && <button onPointerDown={handleMasterPointerDown} onPointerMove={handleMasterPointerMove} onPointerUp={handleMasterPointerUp} onClick={(event) => { if (masterDragCompletedRef.current) { event.preventDefault(); masterDragCompletedRef.current = false; return; } setIsMasterPanelOpen(true); }} aria-label="Master control options" title="Master control options" aria-expanded={false} className="flex h-11 touch-none cursor-grab items-center justify-center rounded-lg border border-red-400/70 bg-red-600 px-4 text-xs font-black tracking-wide text-white shadow-xl transition-all hover:-translate-y-0.5 hover:bg-red-500 active:translate-y-0 active:cursor-grabbing">MASTER CONTROL</button>}
+        {!isMasterPanelOpen && <div className="relative" style={{ width: masterControlSize.width, height: masterControlSize.height }}>
+          <button onPointerDown={handleMasterPointerDown} onPointerMove={handleMasterPointerMove} onPointerUp={handleMasterPointerUp} onClick={(event) => { if (masterDragCompletedRef.current) { event.preventDefault(); masterDragCompletedRef.current = false; return; } setIsMasterPanelOpen(true); }} aria-label="Master control options" title="Master control options" aria-expanded={false} className="flex h-full w-full touch-none cursor-grab items-center justify-center rounded-lg border border-red-400/70 bg-red-600 px-4 text-xs font-black tracking-wide text-white shadow-xl transition-all hover:-translate-y-0.5 hover:bg-red-500 active:translate-y-0 active:cursor-grabbing">MASTER CONTROL</button>
+          <span onPointerDown={handleMasterResizeStart} onPointerMove={handleMasterResizeMove} onPointerUp={handleMasterResizeEnd} aria-label="Resize master control" title="Drag to resize" className="absolute bottom-0 right-0 z-10 h-4 w-4 cursor-se-resize rounded-tl bg-white/30 hover:bg-white/60" />
+        </div>}
       </div>}
       {nowPlaying?.videoId && (
         <>
