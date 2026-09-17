@@ -186,7 +186,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     const distanceY = event.clientY - drag.startY;
     if (Math.hypot(distanceX, distanceY) > 5) drag.moved = true;
     if (!drag.moved) return;
-    const nextPosition = { x: Math.min(window.innerWidth - 170, Math.max(0, drag.originX + distanceX)), y: Math.min(window.innerHeight - 44, Math.max(0, drag.originY + distanceY)) };
+    const controlWidth = isMasterPanelOpen ? Math.min(masterControlSize.width, window.innerWidth - 32) : 170;
+    const nextPosition = { x: Math.min(window.innerWidth - controlWidth - 16, Math.max(0, drag.originX + distanceX)), y: Math.min(window.innerHeight - 44, Math.max(0, drag.originY + distanceY)) };
     masterControlPositionRef.current = nextPosition;
     setMasterControlPosition(nextPosition);
   }
@@ -230,6 +231,22 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("bh-playback-change", handlePlaybackChange);
     };
   }, []);
+
+  useEffect(() => {
+    const keepControlInViewport = () => {
+      const controlWidth = isMasterPanelOpen ? Math.min(masterControlSize.width, window.innerWidth - 32) : 170;
+      const nextPosition = {
+        x: Math.max(0, Math.min(masterControlPositionRef.current.x, window.innerWidth - controlWidth - 16)),
+        y: Math.max(0, Math.min(masterControlPositionRef.current.y, window.innerHeight - 44)),
+      };
+      masterControlPositionRef.current = nextPosition;
+      setMasterControlPosition(nextPosition);
+    };
+
+    keepControlInViewport();
+    window.addEventListener("resize", keepControlInViewport);
+    return () => window.removeEventListener("resize", keepControlInViewport);
+  }, [isMasterPanelOpen, masterControlSize.width]);
 
   const sessionActivity = (() => {
     try {
