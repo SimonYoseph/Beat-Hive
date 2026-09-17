@@ -838,7 +838,7 @@ export default function BeatHiveApp() {
                         {roomLink && <QRCodeSVG value={roomLink} size={160} level="M" includeMargin />}
                       </div>
                       <p className="mb-3 text-center text-xs font-medium text-gray-500">Scan to join {roomName}</p>
-                      <div className="w-full flex items-center justify-end gap-2 bg-gray-50 rounded-xl p-3 border border-gray-200 shadow-sm">
+                      <div className="w-full flex items-center justify-center gap-2 bg-gray-50 rounded-xl p-3 border border-gray-200 shadow-sm">
                         <div className="flex shrink-0 gap-2"><button onClick={() => void copyRoomLink()} title="Copy Hive link" className="flex h-8 items-center justify-center gap-1 rounded bg-gray-200 px-2 text-xs font-bold text-gray-700 hover:bg-gray-300"><Copy size={14} />Copy Hive Link</button><button onClick={() => void shareRoomLink()} title="Send Hive invite" className="flex h-8 items-center justify-center gap-1 rounded bg-yellow-500 px-2 text-xs font-bold text-black hover:bg-yellow-400"><Share2 size={14} />Send Hive Invite</button></div>
                       </div>
                       {shareStatus && <p className="mt-2 text-xs font-bold text-yellow-700" role="status">{shareStatus}</p>}
