@@ -333,7 +333,7 @@ export default function YoutubePage() {
 
   function upvoteHiveTrack(videoId: string) {
     if (!isMasterAccount && masterSettings.queueLocked) {
-      setMessage("Hive Queue edits are locked by Master Control.");
+      setMessage("Hive Queue edits are locked by Omni Control.");
       return;
     }
     const nextPlayQueue = playQueue.map((track) => track.videoId === videoId ? { ...track, upvotes: track.upvotes + 1 } : track);
@@ -349,7 +349,7 @@ export default function YoutubePage() {
 
   function handleQueueDragEnd(event: DragEndEvent) {
     if (!isMasterAccount && masterSettings.queueLocked) {
-      setMessage("Hive Queue edits are locked by Master Control.");
+      setMessage("Hive Queue edits are locked by Omni Control.");
       return;
     }
     const { active, over } = event;
@@ -483,7 +483,7 @@ export default function YoutubePage() {
 
   async function queueTrack(track: SearchResult) {
     if (!isMasterAccount && masterSettings.requestsPaused) {
-      setMessage("Requests are paused by Master Control.");
+      setMessage("Requests are paused by Omni Control.");
       return;
     }
     if (!isMasterAccount && masterSettings.preventDuplicates && requestTracks.some((queuedTrack) => queuedTrack.videoId === track.id.videoId)) {

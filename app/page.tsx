@@ -1164,9 +1164,9 @@ export default function BeatHiveApp() {
                   )}
                 </div>
                 {isMasterAccount && <div>
-                  <h3 className="mb-3 text-sm font-bold uppercase tracking-widest text-gray-400">Master Control</h3>
+                  <h3 className="mb-3 text-sm font-bold uppercase tracking-widest text-gray-400">Omni Control</h3>
                   <button onClick={() => setIsMasterControlEnabled((enabled) => !enabled)} role="switch" aria-checked={isMasterControlEnabled} className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-[#111] p-4 text-left transition-colors hover:border-yellow-500/50">
-                    <span className="text-sm font-bold text-white">Master control</span>
+                    <span className="text-sm font-bold text-white">Omni Control</span>
                     <span className={`relative h-6 w-11 rounded-full transition-colors ${isMasterControlEnabled ? 'bg-yellow-500' : 'bg-gray-700'}`}><span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-transform ${isMasterControlEnabled ? 'left-6' : 'left-1'}`} /></span>
                   </button>
                 </div>}

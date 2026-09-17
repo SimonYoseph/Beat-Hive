@@ -65,7 +65,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const [isMasterControlEnabled, setIsMasterControlEnabled] = useState(true);
   const [isMasterPanelOpen, setIsMasterPanelOpen] = useState(false);
   const [masterControlPosition, setMasterControlPosition] = useState({ x: 16, y: 16 });
-  const [masterControlSize, setMasterControlSize] = useState({ width: 224, height: 154 });
+  const [masterControlSize, setMasterControlSize] = useState({ width: 440, height: 0 });
   const [masterSettings, setMasterSettings] = useState<MasterSettings>(DEFAULT_MASTER_SETTINGS);
   const playerRef = useRef<HTMLVideoElement>(null);
   const masterDragRef = useRef<{ startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(null);
@@ -200,14 +200,14 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     event.preventDefault();
     event.stopPropagation();
     event.currentTarget.setPointerCapture(event.pointerId);
-    masterResizeRef.current = { startX: event.clientX, startY: event.clientY, width: masterControlSize.width, height: masterControlSize.height };
+    masterResizeRef.current = { startX: event.clientX, startY: event.clientY, width: masterControlSize.width, height: 0 };
   }
 
   function handleMasterResizeMove(event: ReactPointerEvent<HTMLSpanElement>) {
     const resize = masterResizeRef.current;
     if (!resize) return;
-    const width = Math.min(window.innerWidth - masterControlPosition.x, Math.max(180, resize.width + event.clientX - resize.startX));
-    const height = Math.min(window.innerHeight - masterControlPosition.y, Math.max(120, resize.height + event.clientY - resize.startY));
+    const width = Math.min(window.innerWidth - masterControlPosition.x, Math.max(400, resize.width + event.clientX - resize.startX));
+    const height = 0;
     masterControlSizeRef.current = { width, height };
     setMasterControlSize({ width, height });
   }
@@ -251,7 +251,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     try {
       const savedSize = JSON.parse(window.localStorage.getItem("bh_masterControlSize") || "null") as { width?: number; height?: number } | null;
       if (typeof savedSize?.width === "number" && typeof savedSize.height === "number") {
-        const restoredSize = { width: Math.max(180, savedSize.width), height: Math.max(120, savedSize.height) };
+        const restoredSize = { width: Math.max(400, savedSize.width), height: 0 };
         masterControlSizeRef.current = restoredSize;
         setMasterControlSize(restoredSize);
       }
@@ -286,12 +286,12 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     <PlaybackContext.Provider value={{ nowPlaying, isPlaying, setNowPlaying, setIsPlaying: (playing) => playing ? startPlayback() : updateIsPlaying(false), refreshPlayback }}>
       {children}
       {isMasterAccount && <div className="fixed z-50" style={{ left: masterControlPosition.x, top: masterControlPosition.y }}>
-        {isMasterPanelOpen && <div className="relative mb-2 overflow-auto rounded-lg border border-emerald-300/40 bg-[#0b1511]/95 p-3 shadow-[0_0_36px_rgba(16,185,129,.25)] backdrop-blur" style={{ width: masterControlSize.width, height: masterControlSize.height }}>
+        {isMasterPanelOpen && <div className="relative mb-2 w-[calc(100vw-2rem)] max-w-[440px] rounded-lg border border-emerald-300/40 bg-[#0b1511]/95 p-3 shadow-[0_0_36px_rgba(16,185,129,.25)] backdrop-blur" style={{ width: `min(${masterControlSize.width}px, calc(100vw - 2rem))` }}>
           <div className="mb-2 flex items-center justify-between gap-2">
             <p className="truncate text-xs font-bold text-white">{nowPlaying?.title || "No song selected"}</p>
-            <button onClick={() => setIsMasterPanelOpen(false)} aria-label="Close master control options" title="Close master control options" className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-white/10 hover:text-white">x</button>
+            <button onClick={() => setIsMasterPanelOpen(false)} aria-label="Close Omni Control" title="Close Omni Control" className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-white/10 hover:text-white">x</button>
           </div>
-          <button onClick={toggleMasterControl} role="switch" aria-checked={isMasterControlEnabled} title={isMasterControlEnabled ? "Switch to Hive User control" : "Switch to Master Control"} className={`flex h-9 w-full items-center justify-between rounded px-3 text-xs font-bold transition-colors ${isMasterControlEnabled ? "bg-emerald-400 text-[#06110b]" : "bg-white/10 text-white"}`}>
+          <button onClick={toggleMasterControl} role="switch" aria-checked={isMasterControlEnabled} title={isMasterControlEnabled ? "Switch to Hive User control" : "Switch to Omni Control"} className={`flex h-9 w-full items-center justify-between rounded px-3 text-xs font-bold transition-colors ${isMasterControlEnabled ? "bg-emerald-400 text-[#06110b]" : "bg-white/10 text-white"}`}>
             <span>Hive User Mode</span><span className={`h-3 w-3 rounded-full ${isMasterControlEnabled ? "bg-black" : "bg-gray-500"}`} />
           </button>
           {isMasterControlEnabled && <>
@@ -304,13 +304,13 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
               <div className="mt-2 flex items-center gap-2"><button onClick={() => setVolume(volume ? 0 : 1)} aria-label={volume ? "Mute audio" : "Unmute audio"} className="text-emerald-300">{volume ? <Volume2 size={17} /> : <VolumeX size={17} />}</button><input aria-label="Master volume" type="range" min="0" max="1" step="0.05" value={volume} onChange={(event) => setVolume(Number(event.target.value))} className="w-full accent-emerald-400" /></div>
               <input aria-label="Seek current song" type="range" min="0" max="100" defaultValue="0" onChange={(event) => { if (playerRef.current?.duration) playerRef.current.currentTime = (Number(event.target.value) / 100) * playerRef.current.duration; }} className="mt-2 w-full accent-emerald-400" />
             </div>
-            <div className="mt-3 grid grid-cols-2 gap-2 text-xs font-bold"><button onClick={() => updateMasterSettings({ requestsPaused: !masterSettings.requestsPaused })} className={`rounded p-2 ${masterSettings.requestsPaused ? "bg-amber-400 text-black" : "bg-white/10 text-white"}`}>{masterSettings.requestsPaused ? "Requests Paused" : "Pause Requests"}</button><button onClick={() => updateMasterSettings({ queueLocked: !masterSettings.queueLocked })} className={`rounded p-2 ${masterSettings.queueLocked ? "bg-amber-400 text-black" : "bg-white/10 text-white"}`}>{masterSettings.queueLocked ? "Queue Locked" : "Lock Queue"}</button><button onClick={clearHiveQueue} className="rounded bg-white/10 p-2 text-white hover:bg-red-600">Clear Hive Queue</button><button onClick={clearAttendeeRequests} className="rounded bg-white/10 p-2 text-white hover:bg-red-600">Clear Requests</button><button onClick={stopAudio} className="rounded bg-red-600 p-2 text-white"><Square className="mr-1 inline" size={13} />Stop Audio</button></div>
-            <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-emerald-50"><label>Max requests<input aria-label="Maximum requests" type="number" min="1" value={masterSettings.maxRequests} onChange={(event) => updateMasterSettings({ maxRequests: Math.max(1, Number(event.target.value) || 1) })} className="mt-1 w-full rounded bg-black/40 p-1 text-white" /></label><label>Vote threshold<input aria-label="Vote threshold" type="number" min="0" value={masterSettings.voteThreshold} onChange={(event) => updateMasterSettings({ voteThreshold: Math.max(0, Number(event.target.value) || 0) })} className="mt-1 w-full rounded bg-black/40 p-1 text-white" /></label><button onClick={() => updateMasterSettings({ preventDuplicates: !masterSettings.preventDuplicates })} className="rounded bg-white/10 p-2">Duplicates: {masterSettings.preventDuplicates ? "Blocked" : "Allowed"}</button><button onClick={resetSession} className="rounded bg-white/10 p-2 hover:bg-red-600"><RotateCcw className="mr-1 inline" size={13} />Reset Session</button></div>
+            <div className="mt-3 grid grid-cols-3 gap-2 text-xs font-bold"><button onClick={() => updateMasterSettings({ requestsPaused: !masterSettings.requestsPaused })} className={`rounded p-2 ${masterSettings.requestsPaused ? "bg-amber-400 text-black" : "bg-white/10 text-white"}`}>{masterSettings.requestsPaused ? "Requests Paused" : "Pause Requests"}</button><button onClick={() => updateMasterSettings({ queueLocked: !masterSettings.queueLocked })} className={`rounded p-2 ${masterSettings.queueLocked ? "bg-amber-400 text-black" : "bg-white/10 text-white"}`}>{masterSettings.queueLocked ? "Queue Locked" : "Lock Queue"}</button><button onClick={stopAudio} className="rounded bg-red-600 p-2 text-white"><Square className="mr-1 inline" size={13} />Stop Audio</button><button onClick={clearHiveQueue} className="rounded bg-white/10 p-2 text-white hover:bg-red-600">Clear Queue</button><button onClick={clearAttendeeRequests} className="rounded bg-white/10 p-2 text-white hover:bg-red-600">Clear Requests</button><button onClick={resetSession} className="rounded bg-white/10 p-2 text-white hover:bg-red-600"><RotateCcw className="mr-1 inline" size={13} />Reset</button></div>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-emerald-50"><label>Max requests<input aria-label="Maximum requests" type="number" min="1" value={masterSettings.maxRequests} onChange={(event) => updateMasterSettings({ maxRequests: Math.max(1, Number(event.target.value) || 1) })} className="mt-1 w-full rounded bg-black/40 p-1 text-white" /></label><label>Vote threshold<input aria-label="Vote threshold" type="number" min="0" value={masterSettings.voteThreshold} onChange={(event) => updateMasterSettings({ voteThreshold: Math.max(0, Number(event.target.value) || 0) })} className="mt-1 w-full rounded bg-black/40 p-1 text-white" /></label><button onClick={() => updateMasterSettings({ preventDuplicates: !masterSettings.preventDuplicates })} className="rounded bg-white/10 p-2">Duplicates: {masterSettings.preventDuplicates ? "Blocked" : "Allowed"}</button></div>
             <div className="mt-3 rounded bg-emerald-400/10 p-2 text-xs text-emerald-100"><span><Activity className="mr-1 inline" size={13} />Session activity</span><p className="mt-1">{sessionActivity.requests} requests · {sessionActivity.votes} votes · {sessionActivity.played} played · 37 attendees</p></div>
           </>}
-          <span onPointerDown={handleMasterResizeStart} onPointerMove={handleMasterResizeMove} onPointerUp={handleMasterResizeEnd} aria-label="Resize master control panel" title="Drag to resize" className="absolute bottom-0 right-0 h-4 w-4 cursor-se-resize rounded-tl bg-white/30 hover:bg-white/60" />
+          <span onPointerDown={handleMasterResizeStart} onPointerMove={handleMasterResizeMove} onPointerUp={handleMasterResizeEnd} aria-label="Resize Omni Control" title="Drag to resize" className="absolute bottom-0 right-0 h-4 w-4 cursor-ew-resize rounded-tl bg-white/30 hover:bg-white/60" />
         </div>}
-        {!isMasterPanelOpen && <button onPointerDown={handleMasterPointerDown} onPointerMove={handleMasterPointerMove} onPointerUp={handleMasterPointerUp} onClick={(event) => { if (masterDragCompletedRef.current) { event.preventDefault(); masterDragCompletedRef.current = false; return; } setIsMasterPanelOpen(true); }} aria-label="Master control options" title="Master control options" aria-expanded={false} className="flex h-11 touch-none cursor-grab items-center justify-center rounded-lg border border-red-400/70 bg-red-600 px-4 text-xs font-black tracking-wide text-white shadow-xl transition-all hover:-translate-y-0.5 hover:bg-red-500 active:translate-y-0 active:cursor-grabbing">MASTER CONTROL</button>}
+        {!isMasterPanelOpen && <button onPointerDown={handleMasterPointerDown} onPointerMove={handleMasterPointerMove} onPointerUp={handleMasterPointerUp} onClick={(event) => { if (masterDragCompletedRef.current) { event.preventDefault(); masterDragCompletedRef.current = false; return; } setIsMasterPanelOpen(true); }} aria-label="Omni Control options" title="Omni Control options" aria-expanded={false} className="flex h-11 touch-none cursor-grab items-center justify-center rounded-lg border border-emerald-300/70 bg-emerald-500 px-4 text-xs font-black tracking-wide text-[#06110b] shadow-[0_0_20px_rgba(52,211,153,.35)] transition-all hover:-translate-y-0.5 hover:bg-emerald-400 active:translate-y-0 active:cursor-grabbing">OMNI CONTROL</button>}
       </div>}
       {nowPlaying?.videoId && (
         <>
