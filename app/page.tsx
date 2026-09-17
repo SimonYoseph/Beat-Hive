@@ -5,6 +5,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import NextLink from 'next/link';
+import { QRCodeSVG } from "qrcode.react";
 import { 
   Music, 
   ThumbsUp, 
@@ -25,6 +26,7 @@ import {
   Users,
   Settings2,
   Copy,
+  Share2,
   EyeOff,
   Link,
   ChevronDown,
@@ -290,6 +292,9 @@ export default function BeatHiveApp() {
   const [tipTotal, setTipTotal] = usePersistedState('bh_tipTotal', 0);
   const [djPreviewingGuest, setDjPreviewingGuest] = usePersistedState('bh_djPreviewingGuest', false);
   const [djQrExpanded, setDjQrExpanded] = usePersistedState('bh_djQrExpanded', false);
+  const [roomName, setRoomName] = usePersistedState('bh_roomName', 'Friday Night Live');
+  const [roomCode, setRoomCode] = usePersistedState('bh_roomCode', '');
+  const [shareStatus, setShareStatus] = useState('');
 
   // Guest State
   const [qrExpanded, setQrExpanded] = usePersistedState('bh_qrExpanded', false);
@@ -384,8 +389,27 @@ export default function BeatHiveApp() {
       return;
     }
     setIsPartyCreator(true);
+    if (!roomCode) setRoomCode(crypto.randomUUID().replaceAll('-', '').slice(0, 8).toUpperCase());
     setDjRoomActive(true);
     window.scrollTo(0, 0);
+  };
+
+  const roomLink = roomCode && typeof window !== 'undefined' ? `${window.location.origin}/join?room=${encodeURIComponent(roomCode)}` : '';
+
+  const copyRoomLink = async () => {
+    if (!roomLink) return;
+    await navigator.clipboard.writeText(roomLink);
+    setShareStatus('Room link copied');
+    window.setTimeout(() => setShareStatus(''), 2000);
+  };
+
+  const shareRoomLink = async () => {
+    if (!roomLink) return;
+    if (navigator.share) {
+      await navigator.share({ title: roomName, text: `Join ${roomName} on Beat Hive`, url: roomLink });
+      return;
+    }
+    await copyRoomLink();
   };
 
   const handleScanAccess = () => {
@@ -705,7 +729,7 @@ export default function BeatHiveApp() {
             <div className="space-y-4 mb-8 text-left">
               <div className="space-y-2">
                 <label className="text-xs font-bold text-gray-500 uppercase tracking-wider pl-1">Room Name</label>
-                <input data-tutorial-target="host-room-name" type="text" placeholder="e.g. Friday Night Live" className="w-full bg-[#111] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500" />
+                <input data-tutorial-target="host-room-name" type="text" value={roomName} onChange={(event) => setRoomName(event.target.value)} placeholder="e.g. Friday Night Live" className="w-full bg-[#111] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500" />
               </div>
               
               <div className="bg-[#111] border border-white/10 rounded-xl p-4 flex items-center justify-between">
@@ -751,7 +775,7 @@ export default function BeatHiveApp() {
                 <h1 className="text-2xl font-black text-white flex items-center gap-2">
                   Live Dashboard <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
                 </h1>
-                <p className="text-sm text-yellow-500 font-medium mb-2">Room: Friday Night Live</p>
+                <p className="text-sm text-yellow-500 font-medium mb-2">Room: {roomName}</p>
                 <button 
                   onClick={() => setIsAnonymousDJ(!isAnonymousDJ)}
                   className={`inline-flex items-center gap-2 text-[10px] px-2.5 py-1.5 rounded-md font-bold uppercase tracking-widest transition-all ${
@@ -806,14 +830,15 @@ export default function BeatHiveApp() {
                     className="w-full overflow-hidden origin-top"
                   >
                     <div className="w-full flex flex-col items-center pt-6">
-                      <div className="w-48 h-48 bg-gray-100 rounded-2xl border-4 border-gray-200 flex items-center justify-center mb-6 shrink-0 shadow-inner">
-                          {/* Fake QR code visualization */}
-                          <QrCode size={120} className="text-black drop-shadow-md" />
+                      <div className="w-48 h-48 bg-white rounded-2xl border-4 border-gray-200 flex items-center justify-center mb-4 shrink-0 shadow-inner">
+                        {roomLink && <QRCodeSVG value={roomLink} size={160} level="M" includeMargin />}
                       </div>
-                      <div className="w-full flex items-center justify-between bg-gray-50 rounded-xl p-3 border border-gray-200 shadow-sm">
-                        <span className="font-mono text-gray-600 font-bold tracking-widest text-lg">BH-9X2P</span>
-                        <button className="text-gray-400 hover:text-black transition-colors"><Copy size={20} /></button>
+                      <p className="mb-3 text-center text-xs font-medium text-gray-500">Scan to join {roomName}</p>
+                      <div className="w-full flex items-center justify-between gap-2 bg-gray-50 rounded-xl p-3 border border-gray-200 shadow-sm">
+                        <span className="min-w-0 truncate font-mono text-gray-600 font-bold tracking-widest text-sm">{roomCode}</span>
+                        <div className="flex shrink-0 gap-1"><button onClick={() => void copyRoomLink()} aria-label="Copy room link" title="Copy room link" className="flex h-8 w-8 items-center justify-center rounded text-gray-500 hover:bg-gray-200 hover:text-black"><Copy size={17} /></button><button onClick={() => void shareRoomLink()} aria-label="Share room link" title="Share room link" className="flex h-8 w-8 items-center justify-center rounded text-gray-500 hover:bg-gray-200 hover:text-black"><Share2 size={17} /></button></div>
                       </div>
+                      {shareStatus && <p className="mt-2 text-xs font-bold text-yellow-700" role="status">{shareStatus}</p>}
                     </div>
                   </motion.div>
                 )}
@@ -913,13 +938,13 @@ export default function BeatHiveApp() {
               <span className="flex-shrink-0 mx-4 text-[#666] text-sm font-semibold uppercase tracking-wider">or</span>
               <div className="flex-grow border-t border-[#333]"></div>
             </div>
-            <button
-              onClick={handleScanAccess}
+            <NextLink
+              href="/join"
               className="w-full py-4 px-6 bg-[#1a1a1a] hover:bg-[#222] border border-[#333] text-white font-bold text-lg rounded-xl flex items-center justify-center gap-3 transition-transform active:scale-95"
             >
               <Link size={22} className="text-gray-400" />
               Enter Room Link
-            </button>
+            </NextLink>
           </div>
         </div>
       </main>
