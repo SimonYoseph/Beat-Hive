@@ -2,7 +2,7 @@
 
 import ReactPlayer from "react-player";
 import { createContext, ReactNode, PointerEvent as ReactPointerEvent, useContext, useEffect, useRef, useState } from "react";
-import { Eye, EyeOff, Pause, Play, Settings2, SkipBack, SkipForward } from "lucide-react";
+import { Eye, EyeOff, Pause, Play, SkipBack, SkipForward } from "lucide-react";
 import { useSession } from "next-auth/react";
 
 const MASTER_CONTROL_EMAIL = "simon97862012@gmail.com";
@@ -142,7 +142,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     const distanceY = event.clientY - drag.startY;
     if (Math.hypot(distanceX, distanceY) > 5) drag.moved = true;
     if (!drag.moved) return;
-    setMasterControlPosition({ x: Math.min(window.innerWidth - 44, Math.max(0, drag.originX + distanceX)), y: Math.min(window.innerHeight - 44, Math.max(0, drag.originY + distanceY)) });
+    setMasterControlPosition({ x: Math.min(window.innerWidth - 170, Math.max(0, drag.originX + distanceX)), y: Math.min(window.innerHeight - 44, Math.max(0, drag.originY + distanceY)) });
   }
 
   function handleMasterPointerUp() {
@@ -200,7 +200,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
             <button onClick={playNextTrack} disabled={!nowPlaying} aria-label="Play next song" title="Play next song" className="flex h-9 w-9 items-center justify-center rounded bg-white/10 text-white hover:bg-yellow-500 hover:text-black disabled:opacity-40"><SkipForward size={17} fill="currentColor" /></button>
           </>}
         </div>}
-        <button onPointerDown={handleMasterPointerDown} onPointerMove={handleMasterPointerMove} onPointerUp={handleMasterPointerUp} onClick={(event) => { if (masterDragCompletedRef.current) { event.preventDefault(); masterDragCompletedRef.current = false; return; } setIsMasterPanelOpen((open) => !open); }} aria-label="Master control options" title="Master control options" className={`flex h-11 w-11 touch-none cursor-grab items-center justify-center rounded-lg border shadow-xl transition-colors active:cursor-grabbing ${isMasterControlEnabled ? "border-yellow-500/50 bg-yellow-500 text-black hover:bg-yellow-400" : "border-white/20 bg-black/85 text-white hover:border-yellow-500"}`}><Settings2 size={19} /></button>
+        <button onPointerDown={handleMasterPointerDown} onPointerMove={handleMasterPointerMove} onPointerUp={handleMasterPointerUp} onClick={(event) => { if (masterDragCompletedRef.current) { event.preventDefault(); masterDragCompletedRef.current = false; return; } setIsMasterPanelOpen((open) => !open); }} aria-label="Master control options" title="Master control options" className="flex h-11 touch-none cursor-grab items-center justify-center rounded-lg border border-red-400/70 bg-red-600 px-4 text-xs font-black tracking-wide text-white shadow-xl transition-colors hover:bg-red-500 active:cursor-grabbing">MASTER CONTROL</button>
       </div>}
       {nowPlaying?.videoId && (
         <>

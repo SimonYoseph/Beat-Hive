@@ -496,7 +496,7 @@ export default function YoutubePage() {
           {!isQueueCollapsed && (
             <DndContext sensors={sensors} onDragStart={handleQueueDragStart} onDragCancel={() => setActiveDragId(null)} onDragEnd={(event) => { setActiveDragId(null); handleQueueDragEnd(event); }}><div className="grid gap-6 md:grid-cols-2">
               <section>
-                <div className="relative mb-2 text-center"><h3 className="font-bold">Your queue</h3><span className="absolute right-0 top-0 text-sm text-gray-500">{requestTracks.length}</span></div>
+                <div className="relative mb-2 text-center"><h3 className="font-bold">Your Queue</h3><span className="absolute right-0 top-0 text-sm text-gray-500">{requestTracks.length}</span></div>
                 <PersonalQueueDropZone>{requestTracks.length === 0 ? <p className="p-3 text-sm text-gray-500">Songs you request will appear here.</p> : <SortableContext items={requestTracks.map((track) => `request-${track.videoId}`)} strategy={verticalListSortingStrategy}><div className="space-y-2">{requestTracks.map((track) => <RequestTrackItem key={track.videoId} track={track} onRemove={removeRequest} />)}</div></SortableContext>}</PersonalQueueDropZone>
               </section>
               <section>
