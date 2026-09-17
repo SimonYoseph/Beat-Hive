@@ -2,7 +2,7 @@
 
 import ReactPlayer from "react-player";
 import { createContext, ReactNode, PointerEvent as ReactPointerEvent, useContext, useEffect, useRef, useState } from "react";
-import { Eye, EyeOff, Pause, Play, SkipBack, SkipForward } from "lucide-react";
+import { Activity, Eye, EyeOff, Pause, Play, RotateCcw, SkipBack, SkipForward, Square, Volume2, VolumeX } from "lucide-react";
 import { useSession } from "next-auth/react";
 
 const MASTER_CONTROL_EMAIL = "simon97862012@gmail.com";
@@ -21,6 +21,16 @@ type PlaybackContextValue = {
   setIsPlaying: (isPlaying: boolean) => void;
   refreshPlayback: () => void;
 };
+
+type MasterSettings = {
+  requestsPaused: boolean;
+  queueLocked: boolean;
+  maxRequests: number;
+  preventDuplicates: boolean;
+  voteThreshold: number;
+};
+
+const DEFAULT_MASTER_SETTINGS: MasterSettings = { requestsPaused: false, queueLocked: false, maxRequests: 20, preventDuplicates: true, voteThreshold: 0 };
 
 const PlaybackContext = createContext<PlaybackContextValue | null>(null);
 
@@ -51,10 +61,12 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const [isPlaying, updateIsPlaying] = useState(false);
   const [isMuted, updateIsMuted] = useState(false);
   const [isVideoHidden, setIsVideoHidden] = useState(false);
+  const [volume, setVolume] = useState(1);
   const [isMasterControlEnabled, setIsMasterControlEnabled] = useState(true);
   const [isMasterPanelOpen, setIsMasterPanelOpen] = useState(false);
   const [masterControlPosition, setMasterControlPosition] = useState({ x: 16, y: 16 });
   const [masterControlSize, setMasterControlSize] = useState({ width: 224, height: 154 });
+  const [masterSettings, setMasterSettings] = useState<MasterSettings>(DEFAULT_MASTER_SETTINGS);
   const playerRef = useRef<HTMLVideoElement>(null);
   const masterDragRef = useRef<{ startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(null);
   const masterDragCompletedRef = useRef(false);
@@ -133,6 +145,34 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     window.dispatchEvent(new Event("bh-master-control-change"));
   }
 
+  function updateMasterSettings(update: Partial<MasterSettings>) {
+    const nextSettings = { ...masterSettings, ...update };
+    setMasterSettings(nextSettings);
+    window.localStorage.setItem("bh_masterSettings", JSON.stringify(nextSettings));
+    window.dispatchEvent(new Event("bh-master-settings-change"));
+  }
+
+  function stopAudio() {
+    updateIsPlaying(false);
+    setNowPlaying(null);
+    window.dispatchEvent(new Event("bh-playback-change"));
+  }
+
+  function clearHiveQueue() {
+    window.localStorage.setItem("bh_play_queue", "[]");
+    stopAudio();
+  }
+
+  function clearAttendeeRequests() {
+    window.localStorage.setItem("bh_youtube_requests", "[]");
+    window.dispatchEvent(new Event("bh-playback-change"));
+  }
+
+  function resetSession() {
+    ["bh_play_queue", "bh_youtube_requests", "bh_play_history", "bh_now_playing"].forEach((key) => window.localStorage.removeItem(key));
+    stopAudio();
+  }
+
   function handleMasterPointerDown(event: ReactPointerEvent<HTMLButtonElement>) {
     event.currentTarget.setPointerCapture(event.pointerId);
     masterDragRef.current = { startX: event.clientX, startY: event.clientY, originX: masterControlPosition.x, originY: masterControlPosition.y, moved: false };
@@ -188,6 +228,25 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  const sessionActivity = (() => {
+    try {
+      const requests = JSON.parse(window.localStorage.getItem("bh_youtube_requests") || "[]") as Array<{ upvotes?: number }>;
+      const history = JSON.parse(window.localStorage.getItem("bh_play_history") || "[]") as unknown[];
+      return { requests: requests.length, votes: requests.reduce((total, track) => total + (track.upvotes || 0), 0), played: history.length };
+    } catch {
+      return { requests: 0, votes: 0, played: 0 };
+    }
+  })();
+
+  useEffect(() => {
+    try {
+      const savedSettings = JSON.parse(window.localStorage.getItem("bh_masterSettings") || "null") as Partial<MasterSettings> | null;
+      if (savedSettings) setMasterSettings({ ...DEFAULT_MASTER_SETTINGS, ...savedSettings });
+    } catch {
+      setMasterSettings(DEFAULT_MASTER_SETTINGS);
+    }
+  }, []);
+
   useEffect(() => {
     try {
       const savedSize = JSON.parse(window.localStorage.getItem("bh_masterControlSize") || "null") as { width?: number; height?: number } | null;
@@ -227,20 +286,27 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     <PlaybackContext.Provider value={{ nowPlaying, isPlaying, setNowPlaying, setIsPlaying: (playing) => playing ? startPlayback() : updateIsPlaying(false), refreshPlayback }}>
       {children}
       {isMasterAccount && <div className="fixed z-50" style={{ left: masterControlPosition.x, top: masterControlPosition.y }}>
-        {isMasterPanelOpen && <div className="relative mb-2 overflow-auto rounded-lg border border-white/15 bg-[#171717]/95 p-2 shadow-2xl backdrop-blur" style={{ width: masterControlSize.width, height: masterControlSize.height }}>
+        {isMasterPanelOpen && <div className="relative mb-2 overflow-auto rounded-lg border border-emerald-300/40 bg-[#0b1511]/95 p-3 shadow-[0_0_36px_rgba(16,185,129,.25)] backdrop-blur" style={{ width: masterControlSize.width, height: masterControlSize.height }}>
           <div className="mb-2 flex items-center justify-between gap-2">
             <p className="truncate text-xs font-bold text-white">{nowPlaying?.title || "No song selected"}</p>
             <button onClick={() => setIsMasterPanelOpen(false)} aria-label="Close master control options" title="Close master control options" className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-white/10 hover:text-white">x</button>
           </div>
-          <button onClick={toggleMasterControl} role="switch" aria-checked={isMasterControlEnabled} title={isMasterControlEnabled ? "Switch to Hive User control" : "Switch to Master Control"} className={`flex h-9 w-full items-center justify-between rounded px-3 text-xs font-bold transition-colors ${isMasterControlEnabled ? "bg-yellow-500 text-black" : "bg-white/10 text-white"}`}>
+          <button onClick={toggleMasterControl} role="switch" aria-checked={isMasterControlEnabled} title={isMasterControlEnabled ? "Switch to Hive User control" : "Switch to Master Control"} className={`flex h-9 w-full items-center justify-between rounded px-3 text-xs font-bold transition-colors ${isMasterControlEnabled ? "bg-emerald-400 text-[#06110b]" : "bg-white/10 text-white"}`}>
             <span>Hive User Mode</span><span className={`h-3 w-3 rounded-full ${isMasterControlEnabled ? "bg-black" : "bg-gray-500"}`} />
           </button>
           {isMasterControlEnabled && <>
-            <div className="mt-2 grid grid-cols-3 gap-2">
-              <button onClick={playPreviousTrack} disabled={!nowPlaying} aria-label="Play previous song" title="Play previous song" className="flex h-11 items-center justify-center rounded-md bg-white/10 text-white transition-all hover:-translate-y-0.5 hover:bg-white/20 active:translate-y-0 disabled:opacity-40"><SkipBack size={19} fill="currentColor" /></button>
-              <button onClick={() => isPlaying ? updateIsPlaying(false) : startPlayback()} disabled={!nowPlaying} aria-label={isPlaying ? "Pause song" : "Play song"} title={isPlaying ? "Pause song" : "Play song"} className="flex h-11 items-center justify-center rounded-md bg-red-600 text-white shadow-lg shadow-red-600/20 transition-all hover:-translate-y-0.5 hover:bg-red-500 active:translate-y-0 disabled:opacity-40">{isPlaying ? <Pause size={19} fill="currentColor" /> : <Play size={19} fill="currentColor" />}</button>
-              <button onClick={playNextTrack} disabled={!nowPlaying} aria-label="Play next song" title="Play next song" className="flex h-11 items-center justify-center rounded-md bg-white/10 text-white transition-all hover:-translate-y-0.5 hover:bg-white/20 active:translate-y-0 disabled:opacity-40"><SkipForward size={19} fill="currentColor" /></button>
+            <div className="mt-3 rounded-md border border-emerald-300/20 bg-black/30 p-2">
+              <div className="grid grid-cols-3 gap-2">
+                <button onClick={playPreviousTrack} disabled={!nowPlaying} aria-label="Play previous song" title="Play previous song" className="flex h-11 items-center justify-center rounded-md bg-white/10 text-white transition-all hover:bg-emerald-400 hover:text-black disabled:opacity-40"><SkipBack size={19} fill="currentColor" /></button>
+                <button onClick={() => isPlaying ? updateIsPlaying(false) : startPlayback()} disabled={!nowPlaying} aria-label={isPlaying ? "Pause song" : "Play song"} title={isPlaying ? "Pause song" : "Play song"} className="flex h-11 items-center justify-center rounded-full border-2 border-emerald-200/70 bg-emerald-500 text-black shadow-[0_0_20px_rgba(52,211,153,.45)] transition-all hover:scale-105 disabled:opacity-40">{isPlaying ? <Pause size={19} fill="currentColor" /> : <Play size={19} fill="currentColor" />}</button>
+                <button onClick={playNextTrack} disabled={!nowPlaying} aria-label="Play next song" title="Play next song" className="flex h-11 items-center justify-center rounded-md bg-white/10 text-white transition-all hover:bg-emerald-400 hover:text-black disabled:opacity-40"><SkipForward size={19} fill="currentColor" /></button>
+              </div>
+              <div className="mt-2 flex items-center gap-2"><button onClick={() => setVolume(volume ? 0 : 1)} aria-label={volume ? "Mute audio" : "Unmute audio"} className="text-emerald-300">{volume ? <Volume2 size={17} /> : <VolumeX size={17} />}</button><input aria-label="Master volume" type="range" min="0" max="1" step="0.05" value={volume} onChange={(event) => setVolume(Number(event.target.value))} className="w-full accent-emerald-400" /></div>
+              <input aria-label="Seek current song" type="range" min="0" max="100" defaultValue="0" onChange={(event) => { if (playerRef.current?.duration) playerRef.current.currentTime = (Number(event.target.value) / 100) * playerRef.current.duration; }} className="mt-2 w-full accent-emerald-400" />
             </div>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-xs font-bold"><button onClick={() => updateMasterSettings({ requestsPaused: !masterSettings.requestsPaused })} className={`rounded p-2 ${masterSettings.requestsPaused ? "bg-amber-400 text-black" : "bg-white/10 text-white"}`}>{masterSettings.requestsPaused ? "Requests Paused" : "Pause Requests"}</button><button onClick={() => updateMasterSettings({ queueLocked: !masterSettings.queueLocked })} className={`rounded p-2 ${masterSettings.queueLocked ? "bg-amber-400 text-black" : "bg-white/10 text-white"}`}>{masterSettings.queueLocked ? "Queue Locked" : "Lock Queue"}</button><button onClick={clearHiveQueue} className="rounded bg-white/10 p-2 text-white hover:bg-red-600">Clear Hive Queue</button><button onClick={clearAttendeeRequests} className="rounded bg-white/10 p-2 text-white hover:bg-red-600">Clear Requests</button><button onClick={stopAudio} className="rounded bg-red-600 p-2 text-white"><Square className="mr-1 inline" size={13} />Stop Audio</button></div>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-emerald-50"><label>Max requests<input aria-label="Maximum requests" type="number" min="1" value={masterSettings.maxRequests} onChange={(event) => updateMasterSettings({ maxRequests: Math.max(1, Number(event.target.value) || 1) })} className="mt-1 w-full rounded bg-black/40 p-1 text-white" /></label><label>Vote threshold<input aria-label="Vote threshold" type="number" min="0" value={masterSettings.voteThreshold} onChange={(event) => updateMasterSettings({ voteThreshold: Math.max(0, Number(event.target.value) || 0) })} className="mt-1 w-full rounded bg-black/40 p-1 text-white" /></label><button onClick={() => updateMasterSettings({ preventDuplicates: !masterSettings.preventDuplicates })} className="rounded bg-white/10 p-2">Duplicates: {masterSettings.preventDuplicates ? "Blocked" : "Allowed"}</button><button onClick={resetSession} className="rounded bg-white/10 p-2 hover:bg-red-600"><RotateCcw className="mr-1 inline" size={13} />Reset Session</button></div>
+            <div className="mt-3 rounded bg-emerald-400/10 p-2 text-xs text-emerald-100"><span><Activity className="mr-1 inline" size={13} />Session activity</span><p className="mt-1">{sessionActivity.requests} requests · {sessionActivity.votes} votes · {sessionActivity.played} played · 37 attendees</p></div>
           </>}
           <span onPointerDown={handleMasterResizeStart} onPointerMove={handleMasterResizeMove} onPointerUp={handleMasterResizeEnd} aria-label="Resize master control panel" title="Drag to resize" className="absolute bottom-0 right-0 h-4 w-4 cursor-se-resize rounded-tl bg-white/30 hover:bg-white/60" />
         </div>}
@@ -254,7 +320,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
               src={`https://www.youtube.com/watch?v=${nowPlaying.videoId}`}
               playing={isPlaying}
               muted={isMuted}
-              volume={1}
+              volume={volume}
               controls
               playsInline
               width="100%"

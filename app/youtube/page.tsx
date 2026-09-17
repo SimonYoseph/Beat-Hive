@@ -3,7 +3,7 @@
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, PointerSensor, useDroppable, useSensor, useSensors } from "@dnd-kit/core";
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ArrowLeft, ChevronDown, ChevronUp, History, ListMusic, LoaderCircle, Menu, Music2, Plus, Search, ThumbsUp, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowUp, ChevronDown, ChevronUp, History, ListMusic, LoaderCircle, Menu, Music2, Play, Plus, Search, ThumbsUp, Trash2 } from "lucide-react";
 import NextLink from "next/link";
 import { signIn, useSession } from "next-auth/react";
 import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
@@ -27,6 +27,16 @@ type RequestedTrack = QueuedTrack & {
   upvotes: number;
 };
 
+type MasterSettings = {
+  requestsPaused: boolean;
+  queueLocked: boolean;
+  maxRequests: number;
+  preventDuplicates: boolean;
+  voteThreshold: number;
+};
+
+const DEFAULT_MASTER_SETTINGS: MasterSettings = { requestsPaused: false, queueLocked: false, maxRequests: 20, preventDuplicates: true, voteThreshold: 0 };
+
 function toQueuedTrack(track: SearchResult): QueuedTrack {
   return {
     videoId: track.id.videoId,
@@ -42,12 +52,15 @@ type QueueTrackItemProps = {
   isPlaying: boolean;
   canReorder: boolean;
   canRemove: boolean;
+  canControlPlayback: boolean;
   showUpvoteCount: boolean;
   onRemove: (videoId: string) => void;
   onUpvote: (videoId: string) => void;
+  onPlayNow: (track: RequestedTrack) => void;
+  onMoveToTop: (videoId: string) => void;
 };
 
-function QueueTrackItem({ track, index, isPlaying, canReorder, canRemove, showUpvoteCount, onRemove, onUpvote }: QueueTrackItemProps) {
+function QueueTrackItem({ track, index, isPlaying, canReorder, canRemove, canControlPlayback, showUpvoteCount, onRemove, onUpvote, onPlayNow, onMoveToTop }: QueueTrackItemProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: track.videoId,
     disabled: !canReorder,
@@ -66,6 +79,8 @@ function QueueTrackItem({ track, index, isPlaying, canReorder, canRemove, showUp
       </div>
       <div className="flex shrink-0 items-center gap-2">
         {isPlaying && <span className="text-xs font-bold text-yellow-500">Playing</span>}
+        {canControlPlayback && <button onClick={() => onPlayNow(track)} className="flex h-8 w-8 items-center justify-center rounded bg-emerald-500/20 text-emerald-300 hover:bg-emerald-400 hover:text-black" aria-label={`Play ${track.title} now`} title="Play now"><Play size={15} fill="currentColor" /></button>}
+        {canControlPlayback && <button onClick={() => onMoveToTop(track.videoId)} className="flex h-8 w-8 items-center justify-center rounded bg-white/5 text-gray-300 hover:bg-emerald-400 hover:text-black" aria-label={`Move ${track.title} to top of queue`} title="Move to top"><ArrowUp size={15} /></button>}
         <button onClick={() => onUpvote(track.videoId)} className={`flex h-8 items-center justify-center rounded bg-white/5 text-sm text-gray-300 hover:bg-yellow-500 hover:text-black ${showUpvoteCount ? "gap-1 px-2" : "w-8"}`} aria-label={`Upvote ${track.title}`} title="Upvote">
           <ThumbsUp size={15} /> {showUpvoteCount && track.upvotes}
         </button>
@@ -129,6 +144,7 @@ export default function YoutubePage() {
   const [isHost, setIsHost] = useState(false);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [isMasterControlEnabled, setIsMasterControlEnabled] = useState(true);
+  const [masterSettings, setMasterSettings] = useState<MasterSettings>(DEFAULT_MASTER_SETTINGS);
   const isMasterAccount = session?.user?.email?.toLowerCase() === MASTER_CONTROL_EMAIL && isMasterControlEnabled;
   const canManageQueue = isMasterAccount || isHost;
   const searchFormRef = useRef<HTMLFormElement>(null);
@@ -136,6 +152,19 @@ export default function YoutubePage() {
 
   useEffect(() => {
     setIsHost(window.localStorage.getItem("bh_userRole") === '"dj"');
+  }, []);
+
+  useEffect(() => {
+    const loadMasterSettings = () => {
+      try {
+        setMasterSettings({ ...DEFAULT_MASTER_SETTINGS, ...(JSON.parse(window.localStorage.getItem("bh_masterSettings") || "{}") as Partial<MasterSettings>) });
+      } catch {
+        setMasterSettings(DEFAULT_MASTER_SETTINGS);
+      }
+    };
+    loadMasterSettings();
+    window.addEventListener("bh-master-settings-change", loadMasterSettings);
+    return () => window.removeEventListener("bh-master-settings-change", loadMasterSettings);
   }, []);
 
   useEffect(() => {
@@ -303,6 +332,10 @@ export default function YoutubePage() {
   }
 
   function upvoteHiveTrack(videoId: string) {
+    if (!isMasterAccount && masterSettings.queueLocked) {
+      setMessage("Hive Queue edits are locked by Master Control.");
+      return;
+    }
     const nextPlayQueue = playQueue.map((track) => track.videoId === videoId ? { ...track, upvotes: track.upvotes + 1 } : track);
     setPlayQueue(nextPlayQueue);
     window.localStorage.setItem("bh_play_queue", JSON.stringify(nextPlayQueue));
@@ -315,6 +348,10 @@ export default function YoutubePage() {
   }
 
   function handleQueueDragEnd(event: DragEndEvent) {
+    if (!isMasterAccount && masterSettings.queueLocked) {
+      setMessage("Hive Queue edits are locked by Master Control.");
+      return;
+    }
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
@@ -402,6 +439,24 @@ export default function YoutubePage() {
     }
   }
 
+  function playTrackNow(track: RequestedTrack) {
+    if (!isMasterAccount) return;
+    setNowPlaying(track);
+    setNowPlayingId(track.videoId);
+    setIsPlaying(true);
+    window.dispatchEvent(new Event("bh-playback-change"));
+  }
+
+  function moveTrackToTop(videoId: string) {
+    if (!isMasterAccount) return;
+    const trackIndex = playQueue.findIndex((track) => track.videoId === videoId);
+    if (trackIndex < 0) return;
+    const nextQueue = arrayMove(playQueue, trackIndex, 0);
+    setPlayQueue(nextQueue);
+    window.localStorage.setItem("bh_play_queue", JSON.stringify(nextQueue));
+    window.dispatchEvent(new Event("bh-playback-change"));
+  }
+
   async function searchForTracks(searchQuery: string) {
     if (!searchQuery.trim()) return;
 
@@ -427,8 +482,16 @@ export default function YoutubePage() {
   }
 
   async function queueTrack(track: SearchResult) {
-    if (requestTracks.some((queuedTrack) => queuedTrack.videoId === track.id.videoId)) {
+    if (!isMasterAccount && masterSettings.requestsPaused) {
+      setMessage("Requests are paused by Master Control.");
+      return;
+    }
+    if (!isMasterAccount && masterSettings.preventDuplicates && requestTracks.some((queuedTrack) => queuedTrack.videoId === track.id.videoId)) {
       setMessage("You have already requested this track.");
+      return;
+    }
+    if (!isMasterAccount && requestTracks.length >= masterSettings.maxRequests) {
+      setMessage(`Request limit reached (${masterSettings.maxRequests}).`);
       return;
     }
 
@@ -508,7 +571,7 @@ export default function YoutubePage() {
               </section>
               <section>
                 <div className="relative mb-2 text-center"><h3 className="font-bold">Hive Queue</h3><span className="absolute right-0 top-0 text-sm text-gray-500">{playQueue.length}</span></div>
-                <HiveQueueDropZone>{playQueue.length === 0 ? <p className="p-3 text-sm text-gray-500">Upvoted requests will play here.</p> : <SortableContext items={movableTrackIds} strategy={verticalListSortingStrategy}><div className="space-y-2">{playQueue.map((track, index) => <QueueTrackItem key={track.videoId} track={track} index={index} isPlaying={track.videoId === nowPlayingId} canReorder={canManageQueue && (isMasterAccount || index >= firstMovableIndex)} canRemove={canManageQueue} showUpvoteCount={canManageQueue} onRemove={removeTrack} onUpvote={upvoteHiveTrack} />)}</div></SortableContext>}</HiveQueueDropZone>
+                <HiveQueueDropZone>{playQueue.length === 0 ? <p className="p-3 text-sm text-gray-500">Upvoted requests will play here.</p> : <SortableContext items={movableTrackIds} strategy={verticalListSortingStrategy}><div className="space-y-2">{playQueue.map((track, index) => <QueueTrackItem key={track.videoId} track={track} index={index} isPlaying={track.videoId === nowPlayingId} canReorder={canManageQueue && (isMasterAccount || index >= firstMovableIndex)} canRemove={canManageQueue} canControlPlayback={isMasterAccount} showUpvoteCount={canManageQueue} onRemove={removeTrack} onUpvote={upvoteHiveTrack} onPlayNow={playTrackNow} onMoveToTop={moveTrackToTop} />)}</div></SortableContext>}</HiveQueueDropZone>
               </section>
             </div><DragOverlay dropAnimation={null}>{isMasterAccount && activeDragTrack && <DragTrackOverlay track={activeDragTrack} />}</DragOverlay></DndContext>
           )}
