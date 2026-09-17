@@ -393,6 +393,7 @@ export default function BeatHiveApp() {
     setIsPartyCreator(true);
     if (!roomCode) setRoomCode(crypto.randomUUID().replaceAll('-', '').slice(0, 8).toUpperCase());
     setDjRoomActive(true);
+    window.dispatchEvent(new Event('bh-host-session-change'));
     window.scrollTo(0, 0);
   };
 
@@ -792,7 +793,7 @@ export default function BeatHiveApp() {
                   {isAnonymousDJ ? 'Incognito Mode On' : 'Incognito Mode Off'}
                 </button>
               </div>
-              <button onClick={() => setDjRoomActive(false)} className="w-10 h-10 bg-red-500/10 text-red-500 rounded-full flex items-center justify-center hover:bg-red-500/20 transition-colors">
+              <button onClick={() => { setDjRoomActive(false); window.dispatchEvent(new Event('bh-host-session-change')); }} className="w-10 h-10 bg-red-500/10 text-red-500 rounded-full flex items-center justify-center hover:bg-red-500/20 transition-colors">
                 <X size={20} />
               </button>
             </header>

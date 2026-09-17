@@ -63,6 +63,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const [isVideoHidden, setIsVideoHidden] = useState(false);
   const [volume, setVolume] = useState(1);
   const [isMasterControlEnabled, setIsMasterControlEnabled] = useState(true);
+  const [isHiveHost, setIsHiveHost] = useState(false);
   const [isMasterPanelOpen, setIsMasterPanelOpen] = useState(false);
   const [masterControlPosition, setMasterControlPosition] = useState({ x: 16, y: 16 });
   const [masterControlSize, setMasterControlSize] = useState({ width: 440, height: 0 });
@@ -74,6 +75,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const masterControlSizeRef = useRef(masterControlSize);
   const masterControlPositionRef = useRef(masterControlPosition);
   const isMasterAccount = session?.user?.email?.toLowerCase() === MASTER_CONTROL_EMAIL;
+  const canControlSession = isMasterAccount || isHiveHost;
+  const isSessionControlEnabled = isMasterAccount ? isMasterControlEnabled : isHiveHost;
+  const sessionControlLabel = isMasterAccount ? "OMNI CONTROL" : "HIVE SESSION";
 
   function startPlayback() {
     updateIsMuted(true);
@@ -233,6 +237,23 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    const syncHostSession = () => {
+      try {
+        setIsHiveHost(window.localStorage.getItem("bh_userRole") === '"dj"' && window.localStorage.getItem("bh_djRoomActive") === "true");
+      } catch {
+        setIsHiveHost(false);
+      }
+    };
+    syncHostSession();
+    window.addEventListener("storage", syncHostSession);
+    window.addEventListener("bh-host-session-change", syncHostSession);
+    return () => {
+      window.removeEventListener("storage", syncHostSession);
+      window.removeEventListener("bh-host-session-change", syncHostSession);
+    };
+  }, []);
+
+  useEffect(() => {
     const keepControlInViewport = () => {
       const controlWidth = isMasterPanelOpen ? Math.min(masterControlSize.width, window.innerWidth - 32) : 170;
       const nextPosition = {
@@ -309,16 +330,16 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   return (
     <PlaybackContext.Provider value={{ nowPlaying, isPlaying, setNowPlaying, setIsPlaying: (playing) => playing ? startPlayback() : updateIsPlaying(false), refreshPlayback }}>
       {children}
-      {isMasterAccount && <div className="fixed z-50" style={{ left: masterControlPosition.x, top: masterControlPosition.y }}>
+      {canControlSession && <div className="fixed z-50" style={{ left: masterControlPosition.x, top: masterControlPosition.y }}>
         {isMasterPanelOpen && <div className="relative mb-2 w-[calc(100vw-2rem)] max-w-[440px] rounded-lg border border-yellow-400/40 bg-[#17130b]/95 p-3 shadow-[0_0_36px_rgba(234,179,8,.2)] backdrop-blur" style={{ width: `min(${masterControlSize.width}px, calc(100vw - 2rem))` }}>
           <div onPointerDown={handleMasterPointerDown} onPointerMove={handleMasterPointerMove} onPointerUp={handleMasterPointerUp} className="mb-2 flex touch-none cursor-grab items-center justify-between gap-2 active:cursor-grabbing">
             <p className="truncate text-xs font-bold text-white">{nowPlaying?.title || "No song selected"}</p>
             <button onPointerDown={(event) => event.stopPropagation()} onClick={() => setIsMasterPanelOpen(false)} aria-label="Close Omni Control" title="Close Omni Control" className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-white/10 hover:text-white">x</button>
           </div>
-          <button onClick={toggleMasterControl} role="switch" aria-checked={isMasterControlEnabled} title={isMasterControlEnabled ? "Switch to Hive User control" : "Switch to Omni Control"} className={`flex h-9 w-full items-center justify-between rounded px-3 text-xs font-bold transition-colors ${isMasterControlEnabled ? "bg-yellow-400 text-[#17130b]" : "bg-white/10 text-white"}`}>
+          {isMasterAccount && <button onClick={toggleMasterControl} role="switch" aria-checked={isMasterControlEnabled} title={isMasterControlEnabled ? "Switch to Hive User control" : "Switch to Omni Control"} className={`flex h-9 w-full items-center justify-between rounded px-3 text-xs font-bold transition-colors ${isMasterControlEnabled ? "bg-yellow-400 text-[#17130b]" : "bg-white/10 text-white"}`}>
             <span>Hive User Mode</span><span className={`h-3 w-3 rounded-full ${isMasterControlEnabled ? "bg-black" : "bg-gray-500"}`} />
-          </button>
-          {isMasterControlEnabled && <>
+          </button>}
+          {isSessionControlEnabled && <>
             <div className="mt-3 rounded-md border border-yellow-400/20 bg-black/30 p-2">
               <div className="grid grid-cols-3 gap-2">
                 <button onClick={playPreviousTrack} disabled={!nowPlaying} aria-label="Play previous song" title="Play previous song" className="flex h-11 items-center justify-center rounded-md bg-white/10 text-white transition-all hover:bg-yellow-400 hover:text-black disabled:opacity-40"><SkipBack size={19} fill="currentColor" /></button>
@@ -334,7 +355,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
           </>}
           <span onPointerDown={handleMasterResizeStart} onPointerMove={handleMasterResizeMove} onPointerUp={handleMasterResizeEnd} aria-label="Resize Omni Control" title="Drag to resize" className="absolute bottom-0 right-0 h-4 w-4 cursor-ew-resize rounded-tl bg-white/30 hover:bg-white/60" />
         </div>}
-        {!isMasterPanelOpen && <button onPointerDown={handleMasterPointerDown} onPointerMove={handleMasterPointerMove} onPointerUp={handleMasterPointerUp} onClick={(event) => { if (masterDragCompletedRef.current) { event.preventDefault(); masterDragCompletedRef.current = false; return; } setIsMasterPanelOpen(true); }} aria-label="Omni Control options" title="Omni Control options" aria-expanded={false} className="flex h-10 w-10 touch-none cursor-grab items-center justify-center rounded-full border border-yellow-300/70 bg-yellow-500 px-0 text-xs font-black tracking-wide text-[#17130b] shadow-[0_0_20px_rgba(234,179,8,.3)] transition-all hover:-translate-y-0.5 hover:bg-yellow-400 active:translate-y-0 active:cursor-grabbing sm:h-11 sm:w-auto sm:rounded-lg sm:px-4"><span className="sm:hidden">OC</span><span className="hidden sm:inline">OMNI CONTROL</span></button>}
+        {!isMasterPanelOpen && <button onPointerDown={handleMasterPointerDown} onPointerMove={handleMasterPointerMove} onPointerUp={handleMasterPointerUp} onClick={(event) => { if (masterDragCompletedRef.current) { event.preventDefault(); masterDragCompletedRef.current = false; return; } setIsMasterPanelOpen(true); }} aria-label={`${sessionControlLabel} options`} title={`${sessionControlLabel} options`} aria-expanded={false} className="flex h-10 w-10 touch-none cursor-grab items-center justify-center rounded-full border border-yellow-300/70 bg-yellow-500 px-0 text-xs font-black tracking-wide text-[#17130b] shadow-[0_0_20px_rgba(234,179,8,.3)] transition-all hover:-translate-y-0.5 hover:bg-yellow-400 active:translate-y-0 active:cursor-grabbing sm:h-11 sm:w-auto sm:rounded-lg sm:px-4"><span className="sm:hidden">{isMasterAccount ? "OC" : "HS"}</span><span className="hidden sm:inline">{sessionControlLabel}</span></button>}
       </div>}
       {nowPlaying?.videoId && (
         <>
