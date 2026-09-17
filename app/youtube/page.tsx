@@ -82,6 +82,18 @@ function QueueTrackItem({ track, index, isPlaying, canReorder, canRemove, showUp
   );
 }
 
+function RequestTrackItem({ track, onRemove }: { track: RequestedTrack; onRemove: (videoId: string) => void }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: `request-${track.videoId}` });
+
+  return (
+    <article ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={`flex items-center gap-2 rounded-lg bg-[#1b1b1b] p-3 ${isDragging ? "opacity-40" : ""}`}>
+      <div className="min-w-0 flex-1"><h4 className="truncate font-bold">{track.title}</h4><p className="truncate text-sm text-gray-400">{track.channelTitle}</p></div>
+      <button type="button" className="flex h-8 w-8 touch-none cursor-grab items-center justify-center rounded bg-white/5 text-gray-300 hover:bg-yellow-500 hover:text-black active:cursor-grabbing" aria-label={`Drag ${track.title} to reorder`} title="Drag to reorder" {...attributes} {...listeners}><Menu size={18} /></button>
+      <button onClick={() => onRemove(track.videoId)} className="flex h-8 w-8 items-center justify-center rounded bg-white/5 text-gray-400 hover:bg-red-500 hover:text-white" aria-label={`Remove ${track.title} from requests`} title="Remove request"><Trash2 size={14} /></button>
+    </article>
+  );
+}
+
 export default function YoutubePage() {
   const { data: session, status } = useSession();
   const { setIsPlaying, setNowPlaying } = usePlayback();
@@ -271,6 +283,19 @@ export default function YoutubePage() {
     window.localStorage.setItem("bh_youtube_requests", JSON.stringify(nextRequests));
   }
 
+  function handleRequestDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = requestTracks.findIndex((track) => `request-${track.videoId}` === active.id);
+    const newIndex = requestTracks.findIndex((track) => `request-${track.videoId}` === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+
+    const nextRequests = arrayMove(requestTracks, oldIndex, newIndex);
+    setRequestTracks(nextRequests);
+    window.localStorage.setItem("bh_youtube_requests", JSON.stringify(nextRequests));
+  }
+
   function handleDragEnd(event: DragEndEvent) {
     if (!canManageQueue) return;
     const { active, over } = event;
@@ -406,7 +431,7 @@ export default function YoutubePage() {
             <div className="grid gap-6 md:grid-cols-2">
               <section>
                 <div className="relative mb-2 text-center"><h3 className="font-bold">Your queue</h3><span className="absolute right-0 top-0 text-sm text-gray-500">{requestTracks.length}</span></div>
-                {requestTracks.length === 0 ? <p className="text-sm text-gray-500">Songs you request will appear here.</p> : <div className="space-y-2">{requestTracks.map((track) => <article key={track.videoId} className="flex items-center gap-2 rounded-lg bg-[#1b1b1b] p-3"><div className="min-w-0 flex-1"><h4 className="truncate font-bold">{track.title}</h4><p className="truncate text-sm text-gray-400">{track.channelTitle}</p></div><button onClick={() => removeRequest(track.videoId)} className="flex h-8 w-8 items-center justify-center rounded bg-white/5 text-gray-400 hover:bg-red-500 hover:text-white" aria-label={`Remove ${track.title} from requests`} title="Remove request"><Trash2 size={14} /></button></article>)}</div>}
+                {requestTracks.length === 0 ? <p className="text-sm text-gray-500">Songs you request will appear here.</p> : <DndContext sensors={sensors} onDragEnd={handleRequestDragEnd}><SortableContext items={requestTracks.map((track) => `request-${track.videoId}`)} strategy={verticalListSortingStrategy}><div className="space-y-2">{requestTracks.map((track) => <RequestTrackItem key={track.videoId} track={track} onRemove={removeRequest} />)}</div></SortableContext></DndContext>}
               </section>
               <section>
                 <div className="relative mb-2 text-center"><h3 className="font-bold">Hive Queue</h3><span className="absolute right-0 top-0 text-sm text-gray-500">{playQueue.length}</span></div>
