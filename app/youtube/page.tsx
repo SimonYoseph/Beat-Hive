@@ -140,7 +140,7 @@ export default function YoutubePage() {
   const [playedTracks, setPlayedTracks] = useState<QueuedTrack[]>([]);
   const [nowPlayingId, setNowPlayingId] = useState<string | null>(null);
   const [isQueueCollapsed, setIsQueueCollapsed] = useState(false);
-  const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
+  const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(true);
   const [isHost, setIsHost] = useState(false);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [isMasterControlEnabled, setIsMasterControlEnabled] = useState(true);
