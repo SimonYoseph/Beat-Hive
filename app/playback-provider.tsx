@@ -190,17 +190,23 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     <PlaybackContext.Provider value={{ nowPlaying, isPlaying, setNowPlaying, setIsPlaying: (playing) => playing ? startPlayback() : updateIsPlaying(false), refreshPlayback }}>
       {children}
       {isMasterAccount && <div className="fixed z-50" style={{ left: masterControlPosition.x, top: masterControlPosition.y }}>
-        {isMasterPanelOpen && <div className="mb-2 flex items-center gap-1 rounded-lg border border-white/15 bg-[#171717]/95 p-2 shadow-2xl backdrop-blur">
-          <button onClick={toggleMasterControl} role="switch" aria-checked={isMasterControlEnabled} title={isMasterControlEnabled ? "Switch to Hive User control" : "Switch to Master Control"} className={`flex h-9 items-center gap-2 rounded px-2 text-xs font-bold transition-colors ${isMasterControlEnabled ? "bg-yellow-500 text-black" : "bg-white/10 text-white"}`}>
-            {isMasterControlEnabled ? "Master Control" : "Hive User"}
+        {isMasterPanelOpen && <div className="mb-2 w-56 rounded-lg border border-white/15 bg-[#171717]/95 p-2 shadow-2xl backdrop-blur">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="truncate text-xs font-bold text-white">{nowPlaying?.title || "No song selected"}</p>
+            <button onClick={() => setIsMasterPanelOpen(false)} aria-label="Close master control options" title="Close master control options" className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-white/10 hover:text-white">x</button>
+          </div>
+          <button onClick={toggleMasterControl} role="switch" aria-checked={isMasterControlEnabled} title={isMasterControlEnabled ? "Switch to Hive User control" : "Switch to Master Control"} className={`flex h-9 w-full items-center justify-between rounded px-3 text-xs font-bold transition-colors ${isMasterControlEnabled ? "bg-yellow-500 text-black" : "bg-white/10 text-white"}`}>
+            <span>{isMasterControlEnabled ? "Master Control" : "Hive User"}</span><span className={`h-3 w-3 rounded-full ${isMasterControlEnabled ? "bg-black" : "bg-gray-500"}`} />
           </button>
           {isMasterControlEnabled && <>
-            <button onClick={playPreviousTrack} disabled={!nowPlaying} aria-label="Play previous song" title="Play previous song" className="flex h-9 w-9 items-center justify-center rounded bg-white/10 text-white hover:bg-yellow-500 hover:text-black disabled:opacity-40"><SkipBack size={17} fill="currentColor" /></button>
-            <button onClick={() => isPlaying ? updateIsPlaying(false) : startPlayback()} disabled={!nowPlaying} aria-label={isPlaying ? "Pause song" : "Play song"} title={isPlaying ? "Pause song" : "Play song"} className="flex h-9 w-9 items-center justify-center rounded bg-white/10 text-white hover:bg-yellow-500 hover:text-black disabled:opacity-40">{isPlaying ? <Pause size={17} fill="currentColor" /> : <Play size={17} fill="currentColor" />}</button>
-            <button onClick={playNextTrack} disabled={!nowPlaying} aria-label="Play next song" title="Play next song" className="flex h-9 w-9 items-center justify-center rounded bg-white/10 text-white hover:bg-yellow-500 hover:text-black disabled:opacity-40"><SkipForward size={17} fill="currentColor" /></button>
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              <button onClick={playPreviousTrack} disabled={!nowPlaying} aria-label="Play previous song" title="Play previous song" className="flex h-11 items-center justify-center rounded-md bg-white/10 text-white transition-all hover:-translate-y-0.5 hover:bg-white/20 active:translate-y-0 disabled:opacity-40"><SkipBack size={19} fill="currentColor" /></button>
+              <button onClick={() => isPlaying ? updateIsPlaying(false) : startPlayback()} disabled={!nowPlaying} aria-label={isPlaying ? "Pause song" : "Play song"} title={isPlaying ? "Pause song" : "Play song"} className="flex h-11 items-center justify-center rounded-md bg-red-600 text-white shadow-lg shadow-red-600/20 transition-all hover:-translate-y-0.5 hover:bg-red-500 active:translate-y-0 disabled:opacity-40">{isPlaying ? <Pause size={19} fill="currentColor" /> : <Play size={19} fill="currentColor" />}</button>
+              <button onClick={playNextTrack} disabled={!nowPlaying} aria-label="Play next song" title="Play next song" className="flex h-11 items-center justify-center rounded-md bg-white/10 text-white transition-all hover:-translate-y-0.5 hover:bg-white/20 active:translate-y-0 disabled:opacity-40"><SkipForward size={19} fill="currentColor" /></button>
+            </div>
           </>}
         </div>}
-        <button onPointerDown={handleMasterPointerDown} onPointerMove={handleMasterPointerMove} onPointerUp={handleMasterPointerUp} onClick={(event) => { if (masterDragCompletedRef.current) { event.preventDefault(); masterDragCompletedRef.current = false; return; } setIsMasterPanelOpen((open) => !open); }} aria-label="Master control options" title="Master control options" className="flex h-11 touch-none cursor-grab items-center justify-center rounded-lg border border-red-400/70 bg-red-600 px-4 text-xs font-black tracking-wide text-white shadow-xl transition-colors hover:bg-red-500 active:cursor-grabbing">MASTER CONTROL</button>
+        <button onPointerDown={handleMasterPointerDown} onPointerMove={handleMasterPointerMove} onPointerUp={handleMasterPointerUp} onClick={(event) => { if (masterDragCompletedRef.current) { event.preventDefault(); masterDragCompletedRef.current = false; return; } setIsMasterPanelOpen((open) => !open); }} aria-label="Master control options" title="Master control options" aria-expanded={isMasterPanelOpen} className={`flex h-11 touch-none cursor-grab items-center justify-center rounded-lg border border-red-400/70 bg-red-600 px-4 text-xs font-black tracking-wide text-white shadow-xl transition-all hover:-translate-y-0.5 hover:bg-red-500 active:translate-y-0 active:cursor-grabbing ${isMasterPanelOpen ? "ring-2 ring-red-300/70" : ""}`}>MASTER CONTROL</button>
       </div>}
       {nowPlaying?.videoId && (
         <>
