@@ -349,6 +349,7 @@ export default function BeatHiveApp() {
   const [roomCode, setRoomCode] = usePersistedState('bh_roomCode', '');
   const [joinedRoom, setJoinedRoom] = usePersistedState<{ code: string; hostName: string; hostEmail: string; roomName: string } | null>('bh_joinedRoom', null);
   const [shareStatus, setShareStatus] = useState('');
+  const [shareAudience, setShareAudience] = useState<'crowd' | 'cohost'>('crowd');
   const [showEndSessionConfirm, setShowEndSessionConfirm] = useState(false);
   const [newRequestCount, setNewRequestCount] = useState(0);
   const [viewedRequestIds, setViewedRequestIds] = usePersistedState<string[]>('bh_viewedRequestIds', []);
@@ -520,20 +521,25 @@ export default function BeatHiveApp() {
   };
 
   const roomLink = (sharedRoom?.code || roomCode) && typeof window !== 'undefined'
-    ? `${window.location.origin}/join?${new URLSearchParams({ room: sharedRoom?.code || roomCode }).toString()}`
+    ? `${window.location.origin}/join?${new URLSearchParams({ room: sharedRoom?.code || roomCode, invite: shareAudience }).toString()}`
     : '';
+
+  const shareAudienceLabel = shareAudience === 'cohost' ? 'Co-host' : 'Crowd';
 
   const copyRoomLink = async () => {
     if (!roomLink) return;
     await navigator.clipboard.writeText(roomLink);
-    setShareStatus('Room link copied');
+    setShareStatus(`${shareAudienceLabel} link copied`);
     window.setTimeout(() => setShareStatus(''), 2000);
   };
 
   const shareRoomLink = async () => {
     if (!roomLink) return;
     if (navigator.share) {
-      await navigator.share({ title: roomName, text: `Join ${roomName} on Beat Hive`, url: roomLink });
+      const text = shareAudience === 'cohost'
+        ? `Co-host ${roomName} on Beat Hive. Sign in with your approved host email to unlock host controls.`
+        : `Join ${roomName} on Beat Hive`;
+      await navigator.share({ title: `${roomName} ${shareAudienceLabel} Invite`, text, url: roomLink });
       return;
     }
     await copyRoomLink();
@@ -1064,9 +1070,13 @@ export default function BeatHiveApp() {
                       <div className="w-48 h-48 bg-white rounded-2xl border-4 border-gray-200 flex items-center justify-center mb-4 shrink-0 shadow-inner">
                         {roomLink && <QRCodeSVG value={roomLink} size={160} level="M" includeMargin />}
                       </div>
-                      <p className="mb-3 text-center text-xs font-medium text-gray-500">Scan to join {roomName}</p>
+                      <div className="mb-3 grid w-full grid-cols-2 rounded-lg bg-gray-100 p-1" aria-label="Invite type">
+                        <button type="button" onClick={() => { setShareAudience('crowd'); setShareStatus(''); }} className={`rounded-md py-2 text-xs font-bold transition-colors ${shareAudience === 'crowd' ? 'bg-white text-black shadow-sm' : 'text-gray-500'}`} aria-pressed={shareAudience === 'crowd'}>Crowd</button>
+                        <button type="button" onClick={() => { setShareAudience('cohost'); setShareStatus(''); }} className={`rounded-md py-2 text-xs font-bold transition-colors ${shareAudience === 'cohost' ? 'bg-white text-black shadow-sm' : 'text-gray-500'}`} aria-pressed={shareAudience === 'cohost'}>Co-host</button>
+                      </div>
+                      <p className="mb-3 text-center text-xs font-medium text-gray-500">{shareAudience === 'cohost' ? 'For an approved host account. They must sign in with the email you added.' : `Scan to join ${roomName} as a guest.`}</p>
                       <div className="w-full bg-gray-50 rounded-xl p-3 border border-gray-200 shadow-sm">
-                        <div className="flex flex-col gap-2 sm:flex-row sm:justify-center"><button onClick={() => void copyRoomLink()} title="Copy Hive link" className="flex h-8 w-full items-center justify-center gap-1 rounded bg-gray-200 px-2 text-xs font-bold text-gray-700 hover:bg-gray-300 sm:w-auto"><Copy size={14} />Copy Hive Link</button><button onClick={() => void shareRoomLink()} title="Send Hive invite" className="flex h-8 w-full items-center justify-center gap-1 rounded bg-yellow-500 px-2 text-xs font-bold text-black hover:bg-yellow-400 sm:w-auto"><Share2 size={14} />Send Hive Invite</button></div>
+                        <div className="flex flex-col gap-2 sm:flex-row sm:justify-center"><button onClick={() => void copyRoomLink()} title={`Copy ${shareAudienceLabel.toLowerCase()} link`} className="flex h-8 w-full items-center justify-center gap-1 rounded bg-gray-200 px-2 text-xs font-bold text-gray-700 hover:bg-gray-300 sm:w-auto"><Copy size={14} />Copy {shareAudienceLabel} Link</button><button onClick={() => void shareRoomLink()} title={`Send ${shareAudienceLabel.toLowerCase()} invite`} className="flex h-8 w-full items-center justify-center gap-1 rounded bg-yellow-500 px-2 text-xs font-bold text-black hover:bg-yellow-400 sm:w-auto"><Share2 size={14} />Send {shareAudienceLabel} Invite</button></div>
                       </div>
                       {shareStatus && <p className="mt-2 text-xs font-bold text-yellow-700" role="status">{shareStatus}</p>}
                     </div>

@@ -94,6 +94,8 @@ export default function JoinRoomPage() {
   }
 
   const roomCode = typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("room") || "";
+  const inviteType = typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("invite") || "";
+  const isCoHostInvite = inviteType === "cohost";
   const needsIdentity = Boolean(roomCode) && !session && !isGuest;
 
   return (
@@ -108,7 +110,7 @@ export default function JoinRoomPage() {
           </div>
         ) : (
           <>
-            <div className="mb-8"><h1 className="flex items-center gap-2 text-2xl font-black"><Music2 className="text-yellow-500" />Join Beat Hive</h1><p className="mt-2 text-sm text-gray-400">{roomCode ? "Joining your live music session..." : "Open a shared room link or paste one below to join the live music session."}</p></div>
+            <div className="mb-8"><h1 className="flex items-center gap-2 text-2xl font-black"><Music2 className="text-yellow-500" />{isCoHostInvite ? "Co-host Invite" : "Join Beat Hive"}</h1><p className="mt-2 text-sm text-gray-400">{roomCode ? (isCoHostInvite ? "Sign in with your approved host email to open host controls." : "Joining your live music session...") : "Open a shared room link or paste one below to join the live music session."}</p></div>
             {!roomCode && <form onSubmit={handleJoinRoom} className="space-y-3">
               <label className="sr-only" htmlFor="room-link">Room link or code</label>
               <div className="flex rounded-xl border border-white/15 bg-[#111] focus-within:border-yellow-500"><LinkIcon className="m-3 shrink-0 text-gray-500" size={20} /><input id="room-link" value={roomInput} onChange={(event) => setRoomInput(event.target.value)} placeholder="Paste a room link or code" className="min-w-0 flex-1 bg-transparent py-3 pr-3 text-white outline-none placeholder:text-gray-600" /></div>
