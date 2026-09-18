@@ -610,11 +610,11 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       </div>}
       {nowPlaying?.videoId && (
         <div className="fixed z-50" style={{ left: playerPosition.x, top: playerPosition.y }}>
-          {!isVideoHidden && <div className="relative pt-10 sm:pt-12">
-            <button onPointerDown={handlePlayerPointerDown} onPointerMove={handlePlayerPointerMove} onPointerUp={handlePlayerPointerUp} onClick={(event) => { if (playerDragCompletedRef.current) { event.preventDefault(); playerDragCompletedRef.current = false; return; } setIsVideoHidden(true); }} aria-label="Hide video player" title="Drag to move. Tap to hide video player" className="absolute right-0 top-0 flex h-9 w-9 touch-none cursor-grab items-center justify-center rounded-lg border border-white/20 bg-black/85 text-white shadow-xl backdrop-blur hover:border-yellow-500 hover:text-yellow-500 active:cursor-grabbing sm:h-11 sm:w-11">
-              <EyeOff size={19} />
+          <div className={`relative ${isVideoHidden ? "h-9 w-9 sm:h-11 sm:w-11" : "pt-10 sm:pt-12"}`}>
+            <button onPointerDown={handlePlayerPointerDown} onPointerMove={handlePlayerPointerMove} onPointerUp={handlePlayerPointerUp} onClick={(event) => { if (playerDragCompletedRef.current) { event.preventDefault(); playerDragCompletedRef.current = false; return; } if (isVideoHidden) { const nextPosition = constrainPlayerPosition(playerPositionRef.current, getPlayerDimensions(false)); playerPositionRef.current = nextPosition; setPlayerPosition(nextPosition); window.localStorage.setItem("bh_videoPlayerPosition", JSON.stringify(nextPosition)); } setIsVideoHidden((hidden) => !hidden); }} aria-label={isVideoHidden ? "Show video player" : "Hide video player"} title={isVideoHidden ? "Drag to move. Tap to show video player" : "Drag to move. Tap to hide video player"} className="absolute right-0 top-0 z-10 flex h-9 w-9 touch-none cursor-grab items-center justify-center rounded-lg border border-white/20 bg-black/85 text-white shadow-xl backdrop-blur hover:border-yellow-500 hover:text-yellow-500 active:cursor-grabbing sm:h-11 sm:w-11">
+              {isVideoHidden ? <Eye size={19} /> : <EyeOff size={19} />}
             </button>
-            <div aria-hidden={false} className="h-[90px] w-[160px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-white/20 bg-black shadow-2xl sm:h-[180px] sm:w-[320px]">
+            <div aria-hidden={isVideoHidden} className={`h-[90px] w-[160px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-white/20 bg-black shadow-2xl transition-opacity sm:h-[180px] sm:w-[320px] ${isVideoHidden ? "pointer-events-none absolute left-0 top-10 opacity-0 sm:top-12" : ""}`}>
             <ReactPlayer
               ref={playerRef}
               src={`https://www.youtube.com/watch?v=${nowPlaying.videoId}`}
@@ -642,10 +642,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
               onLoadedMetadata={(event) => setTrackDuration(event.currentTarget.duration)}
             />
           </div>
-          </div>}
-          {isVideoHidden && <button onPointerDown={handlePlayerPointerDown} onPointerMove={handlePlayerPointerMove} onPointerUp={handlePlayerPointerUp} onClick={(event) => { if (playerDragCompletedRef.current) { event.preventDefault(); playerDragCompletedRef.current = false; return; } const nextPosition = constrainPlayerPosition(playerPositionRef.current, getPlayerDimensions(false)); playerPositionRef.current = nextPosition; setPlayerPosition(nextPosition); window.localStorage.setItem("bh_videoPlayerPosition", JSON.stringify(nextPosition)); setIsVideoHidden(false); }} aria-label="Show video player" title="Drag to move. Tap to show video player" className="flex h-9 w-9 touch-none cursor-grab items-center justify-center rounded-lg border border-white/20 bg-black/85 text-white shadow-xl backdrop-blur hover:border-yellow-500 hover:text-yellow-500 active:cursor-grabbing sm:h-11 sm:w-11">
-            <Eye size={19} />
-          </button>}
+          </div>
         </div>
       )}
     </PlaybackContext.Provider>
