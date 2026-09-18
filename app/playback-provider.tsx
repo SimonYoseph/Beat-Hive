@@ -15,6 +15,9 @@ type NowPlayingTrack = {
   channelTitle: string;
   thumbnail?: string;
 };
+type QueuedFallbackTrack = NowPlayingTrack & { videoId: string };
+
+type SearchTrack = { id?: { videoId?: string }; snippet?: { title?: string; channelTitle?: string; thumbnails?: { medium?: { url?: string }; default?: { url?: string } } } };
 
 type PlaybackContextValue = {
   nowPlaying: NowPlayingTrack | null;
@@ -33,6 +36,12 @@ type MasterSettings = {
 };
 
 const DEFAULT_MASTER_SETTINGS: MasterSettings = { requestsPaused: false, queueLocked: false, maxRequests: 20, preventDuplicates: true, voteThreshold: 0 };
+
+function formatPlaybackTime(seconds: number) {
+  if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
+  const roundedSeconds = Math.floor(seconds);
+  return `${Math.floor(roundedSeconds / 60)}:${String(roundedSeconds % 60).padStart(2, "0")}`;
+}
 
 const PlaybackContext = createContext<PlaybackContextValue | null>(null);
 
@@ -62,10 +71,14 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const { room, refreshRoom, updateHostState, manageRoomHost } = useRoom();
   const [nowPlaying, updateNowPlaying] = useState<NowPlayingTrack | null>(null);
   const [isPlaying, updateIsPlaying] = useState(false);
+  const [hasRestoredPlayback, setHasRestoredPlayback] = useState(false);
   const [isMuted, updateIsMuted] = useState(false);
   const [isVideoHidden, setIsVideoHidden] = useState(false);
   const [volume, setVolume] = useState(1);
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const [trackDuration, setTrackDuration] = useState(0);
   const [transitionGain, setTransitionGain] = useState(1);
+  const [isFindingFallbackTrack, setIsFindingFallbackTrack] = useState(false);
   const [isMasterControlEnabled, setIsMasterControlEnabled] = useState(true);
   const [roleEmail, setRoleEmail] = useState("");
   const [roleMessage, setRoleMessage] = useState("");
@@ -78,6 +91,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const transitionGainRef = useRef(1);
   const transitionFrameRef = useRef<number | null>(null);
   const isTransitioningRef = useRef(false);
+  const fallbackForTrackRef = useRef<string | null>(null);
   const masterDragRef = useRef<{ startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(null);
   const masterDragCompletedRef = useRef(false);
   const masterResizeRef = useRef<{ startX: number; startY: number; width: number; height: number } | null>(null);
@@ -102,7 +116,10 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   }
 
   function refreshPlayback() {
-    updateNowPlaying(readNowPlaying());
+    const savedTrack = readNowPlaying();
+    updateNowPlaying(savedTrack);
+    if (savedTrack?.videoId && window.localStorage.getItem("bh_isPlaying") === "true") updateIsPlaying(true);
+    setHasRestoredPlayback(true);
     if (window.localStorage.getItem("bh_queue_autoplay") === "true") {
       window.localStorage.removeItem("bh_queue_autoplay");
       startPlayback();
@@ -114,6 +131,49 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     if (track) window.localStorage.setItem("bh_now_playing", JSON.stringify(track));
     else window.localStorage.removeItem("bh_now_playing");
     persistHostState((state) => ({ ...state, nowPlaying: track?.videoId ? { ...track, videoId: track.videoId } : null }));
+  }
+
+  function selectedVibe() {
+    const roomVibe = room?.state.feedback?.selectedVibe;
+    if (typeof roomVibe === "string" && roomVibe.trim()) return roomVibe.trim();
+    try {
+      const storedVibe = JSON.parse(window.localStorage.getItem("bh_selectedVibe") || "null");
+      return typeof storedVibe === "string" ? storedVibe : "";
+    } catch {
+      return "";
+    }
+  }
+
+  function ensureFallbackTrack(currentTrack: NowPlayingTrack) {
+    if (!currentTrack.videoId || !canControlSession || fallbackForTrackRef.current === currentTrack.videoId) return;
+    const queue = room?.state.queue || (() => {
+      try { return JSON.parse(window.localStorage.getItem("bh_play_queue") || "[]") as NowPlayingTrack[]; } catch { return []; }
+    })();
+    const currentIndex = queue.findIndex((track) => track.videoId === currentTrack.videoId);
+    if (currentIndex < 0 || currentIndex < queue.length - 1) return;
+
+    fallbackForTrackRef.current = currentTrack.videoId;
+    setIsFindingFallbackTrack(true);
+    const vibe = selectedVibe();
+    const query = vibe ? `${vibe} party music` : `${currentTrack.channelTitle} ${currentTrack.title} similar music`;
+    void fetch(`/api/youtube/search?q=${encodeURIComponent(query)}`).then(async (response) => {
+      if (!response.ok) throw new Error("Could not find a matching track.");
+      const data = await response.json() as { items?: SearchTrack[] };
+      const match = data.items?.find((item) => item.id?.videoId && item.id.videoId !== currentTrack.videoId && item.snippet?.title && item.snippet.channelTitle);
+      if (!match?.id?.videoId || !match.snippet?.title || !match.snippet.channelTitle) return;
+      const fallbackTrack: QueuedFallbackTrack = { videoId: match.id.videoId, title: match.snippet.title, channelTitle: match.snippet.channelTitle, thumbnail: match.snippet.thumbnails?.medium?.url || match.snippet.thumbnails?.default?.url };
+      if (room) {
+        persistHostState((state) => {
+          const currentQueue = state.queue || [];
+          const latestIndex = currentQueue.findIndex((track) => track.videoId === currentTrack.videoId);
+          return latestIndex >= 0 && latestIndex === currentQueue.length - 1 ? { ...state, queue: [...currentQueue, fallbackTrack] } : state;
+        });
+      } else {
+        const latestQueue = JSON.parse(window.localStorage.getItem("bh_play_queue") || "[]") as NowPlayingTrack[];
+        if (!latestQueue.some((track) => track.videoId === fallbackTrack.videoId)) window.localStorage.setItem("bh_play_queue", JSON.stringify([...latestQueue, fallbackTrack]));
+        window.dispatchEvent(new Event("bh-playback-change"));
+      }
+    }).catch(() => undefined).finally(() => setIsFindingFallbackTrack(false));
   }
 
   function fadeTo(gain: number, duration: number) {
@@ -324,6 +384,32 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  useEffect(() => {
+    if (!hasRestoredPlayback) return;
+    window.localStorage.setItem("bh_isPlaying", JSON.stringify(isPlaying));
+  }, [hasRestoredPlayback, isPlaying]);
+
+  useEffect(() => {
+    const restoreAfterBackground = () => {
+      if (document.visibilityState === "visible") refreshPlayback();
+    };
+    document.addEventListener("visibilitychange", restoreAfterBackground);
+    window.addEventListener("pageshow", restoreAfterBackground);
+    return () => {
+      document.removeEventListener("visibilitychange", restoreAfterBackground);
+      window.removeEventListener("pageshow", restoreAfterBackground);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!("mediaSession" in navigator)) return;
+    navigator.mediaSession.metadata = nowPlaying ? new MediaMetadata({ title: nowPlaying.title, artist: nowPlaying.channelTitle, artwork: nowPlaying.thumbnail ? [{ src: nowPlaying.thumbnail }] : [] }) : null;
+    navigator.mediaSession.setActionHandler("play", startPlayback);
+    navigator.mediaSession.setActionHandler("pause", () => updateIsPlaying(false));
+    navigator.mediaSession.setActionHandler("nexttrack", playNextTrack);
+    navigator.mediaSession.setActionHandler("previoustrack", playPreviousTrack);
+  }, [nowPlaying, isPlaying]);
+
   useEffect(() => () => {
     if (transitionFrameRef.current !== null) cancelAnimationFrame(transitionFrameRef.current);
   }, []);
@@ -334,6 +420,11 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     if (typeof room.state.isPlaying === "boolean") updateIsPlaying(room.state.isPlaying);
     if (room.state.settings) setMasterSettings({ ...DEFAULT_MASTER_SETTINGS, ...room.state.settings as Partial<MasterSettings> });
   }, [room]);
+
+  useEffect(() => {
+    setElapsedTime(0);
+    setTrackDuration(0);
+  }, [nowPlaying?.videoId]);
 
   useEffect(() => {
     const keepControlInViewport = () => {
@@ -448,7 +539,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
                 <button onClick={playNextTrack} disabled={!nowPlaying} aria-label="Play next song" title="Play next song" className="flex h-11 items-center justify-center rounded-md bg-white/10 text-white transition-all hover:bg-yellow-400 hover:text-black disabled:opacity-40"><SkipForward size={19} fill="currentColor" /></button>
               </div>
               <div className="mt-2 flex items-center gap-2"><button onClick={() => setVolume(volume ? 0 : 1)} aria-label={volume ? "Mute audio" : "Unmute audio"} className="text-yellow-300">{volume ? <Volume2 size={17} /> : <VolumeX size={17} />}</button><input aria-label="Omni Control volume" type="range" min="0" max="1" step="0.05" value={volume} onChange={(event) => setVolume(Number(event.target.value))} className="w-full accent-yellow-400" /></div>
-              <input aria-label="Seek current song" type="range" min="0" max="100" defaultValue="0" onChange={(event) => { if (playerRef.current?.duration) playerRef.current.currentTime = (Number(event.target.value) / 100) * playerRef.current.duration; }} className="mt-2 w-full accent-yellow-400" />
+              <div className="mt-2"><div className="mb-1 flex justify-between text-[10px] font-bold tabular-nums text-yellow-100"><span>{formatPlaybackTime(elapsedTime)}</span><span>{formatPlaybackTime(trackDuration)}</span></div><input aria-label="Seek current song" aria-valuetext={`${formatPlaybackTime(elapsedTime)} of ${formatPlaybackTime(trackDuration)}`} type="range" min="0" max={trackDuration || 0} step="1" value={Math.min(elapsedTime, trackDuration)} disabled={trackDuration <= 0} onChange={(event) => { const nextTime = Number(event.target.value); if (playerRef.current?.duration) playerRef.current.currentTime = nextTime; setElapsedTime(nextTime); }} className="w-full accent-yellow-400 disabled:opacity-40" /></div>
             </div>
             <div className="mt-3 grid grid-cols-3 gap-2 text-xs font-bold"><button onClick={() => updateMasterSettings({ requestsPaused: !masterSettings.requestsPaused })} className={`rounded p-2 ${masterSettings.requestsPaused ? "bg-amber-400 text-black" : "bg-white/10 text-white"}`}>{masterSettings.requestsPaused ? "Requests Paused" : "Pause Requests"}</button><button onClick={() => updateMasterSettings({ queueLocked: !masterSettings.queueLocked })} className={`rounded p-2 ${masterSettings.queueLocked ? "bg-amber-400 text-black" : "bg-white/10 text-white"}`}>{masterSettings.queueLocked ? "Queue Locked" : "Lock Queue"}</button><button onClick={stopAudio} className="rounded bg-red-600 p-2 text-white"><Square className="mr-1 inline" size={13} />Stop Audio</button><button onClick={clearHiveQueue} className="rounded bg-white/10 p-2 text-white hover:bg-red-600">Clear Queue</button><button onClick={clearAttendeeRequests} className="rounded bg-white/10 p-2 text-white hover:bg-red-600">Clear Requests</button><button onClick={resetSession} className="rounded bg-white/10 p-2 text-white hover:bg-red-600"><RotateCcw className="mr-1 inline" size={13} />Reset</button></div>
             <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-yellow-50"><label>Max requests<input aria-label="Maximum requests" type="number" min="1" value={masterSettings.maxRequests} onChange={(event) => updateMasterSettings({ maxRequests: Math.max(1, Number(event.target.value) || 1) })} className="mt-1 w-full rounded bg-black/40 p-1 text-white" /></label><label>Vote threshold<input aria-label="Vote threshold" type="number" min="0" value={masterSettings.voteThreshold} onChange={(event) => updateMasterSettings({ voteThreshold: Math.max(0, Number(event.target.value) || 0) })} className="mt-1 w-full rounded bg-black/40 p-1 text-white" /></label><button onClick={() => updateMasterSettings({ preventDuplicates: !masterSettings.preventDuplicates })} className="rounded bg-white/10 p-2">Duplicates: {masterSettings.preventDuplicates ? "Blocked" : "Allowed"}</button></div>
@@ -465,6 +556,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
               ref={playerRef}
               src={`https://www.youtube.com/watch?v=${nowPlaying.videoId}`}
               playing={isPlaying}
+              loop={isFindingFallbackTrack}
               muted={isMuted}
               volume={volume * transitionGain}
               controls
@@ -478,6 +570,13 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
               onPlaying={() => updateIsMuted(false)}
               onPause={() => { if (!isTransitioningRef.current) updateIsPlaying(false); }}
               onEnded={handleTrackEnded}
+              onTimeUpdate={(event) => {
+                const player = event.currentTarget;
+                if (Number.isFinite(player.duration)) setTrackDuration(player.duration);
+                setElapsedTime(player.currentTime);
+                if (player.duration - player.currentTime <= 12) ensureFallbackTrack(nowPlaying);
+              }}
+              onLoadedMetadata={(event) => setTrackDuration(event.currentTarget.duration)}
             />
           </div>
           {!isVideoHidden && <button onClick={() => setIsVideoHidden(true)} aria-label="Hide video player" title="Hide video player" className="fixed bottom-[calc(90px+1.25rem)] right-4 z-50 flex h-9 w-9 items-center justify-center rounded-lg border border-white/20 bg-black/85 text-white shadow-xl backdrop-blur hover:border-yellow-500 hover:text-yellow-500 sm:bottom-[calc(180px+1.25rem)] sm:h-11 sm:w-11">
