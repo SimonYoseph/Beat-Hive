@@ -276,6 +276,7 @@ export default function BeatHiveApp() {
   const [isClient, setIsClient] = useState(false);
   const isFindingVibeTrack = useRef(false);
   const [isRoleChoiceOpen, setIsRoleChoiceOpen] = useState(false);
+  const [isOmniControlOpen, setIsOmniControlOpen] = useState(false);
 
   // Always force scroll to top on exact mounting of the main component
   useEffect(() => {
@@ -1239,16 +1240,29 @@ export default function BeatHiveApp() {
             </h1>
             <p className="text-xs text-yellow-500/80 uppercase tracking-widest font-bold">Live Queue Control</p>
           </header>
-          {isMasterAccount && <button
-            type="button"
-            onClick={() => { setIsRoleChoiceOpen(true); setHasAccess(false); setDjPreviewingGuest(false); window.scrollTo(0, 0); }}
-            title="Choose host or join mode"
-            aria-label="Open Omni Control"
-            className="absolute right-2 flex h-10 items-center gap-2 rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-3 text-xs font-bold text-yellow-500 transition-colors hover:bg-yellow-500 hover:text-black sm:right-8"
-          >
-            <ShieldAlert size={17} />
-            <span>Omni Control</span>
-          </button>}
+          {isMasterAccount && <div className="absolute right-2 z-50 sm:right-8">
+            <button
+              type="button"
+              onClick={() => setIsOmniControlOpen((isOpen) => !isOpen)}
+              title="Open Omni Control"
+              aria-label="Open Omni Control"
+              aria-expanded={isOmniControlOpen}
+              className="flex h-10 items-center gap-2 rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-3 text-xs font-bold text-yellow-500 transition-colors hover:bg-yellow-500 hover:text-black"
+            >
+              <ShieldAlert size={17} />
+              <span>Omni Control</span>
+            </button>
+            {isOmniControlOpen && <div className="absolute right-0 top-12 w-52 rounded-lg border border-yellow-500/30 bg-[#1a1a1a] p-2 shadow-2xl">
+              <button
+                type="button"
+                onClick={() => { setIsOmniControlOpen(false); setIsRoleChoiceOpen(true); setHasAccess(false); setDjPreviewingGuest(false); window.scrollTo(0, 0); }}
+                className="flex w-full items-center gap-2 rounded-md px-3 py-3 text-left text-sm font-bold text-white transition-colors hover:bg-yellow-500 hover:text-black"
+              >
+                <Users size={17} />
+                Who are you today?
+              </button>
+            </div>}
+          </div>}
         </div>
 
         {userRole === 'guest' && joinedRoom && <div className="mb-4 flex items-center justify-center gap-2 rounded-lg border border-yellow-500/20 bg-yellow-500/5 px-3 py-2 text-center text-xs text-yellow-100"><span className="h-2 w-2 shrink-0 rounded-full bg-yellow-500" />Connected to {joinedRoom.hostName}&apos;s room: {joinedRoom.roomName}</div>}
