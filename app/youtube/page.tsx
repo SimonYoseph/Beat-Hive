@@ -689,11 +689,11 @@ export default function YoutubePage() {
           </div>
           {!isQueueCollapsed && (
             <DndContext sensors={sensors} onDragStart={handleQueueDragStart} onDragCancel={() => setActiveDragId(null)} onDragEnd={(event) => { setActiveDragId(null); handleQueueDragEnd(event); }}><div className="grid gap-6 md:grid-cols-2">
-              <section>
+              <section className="min-w-0">
                 <div className="relative mb-2 text-center"><h3 className="font-bold">Your Queue</h3><span className="absolute right-0 top-0 text-sm text-gray-500">{requestTracks.length}</span></div>
                 <PersonalQueueDropZone>{requestTracks.length === 0 ? <p className="p-3 text-sm text-gray-500">Songs you request will appear here.</p> : <SortableContext items={requestTracks.map((track) => `request-${track.videoId}`)} strategy={verticalListSortingStrategy}><div className="space-y-2">{requestTracks.map((track) => <RequestTrackItem key={track.videoId} track={track} onRemove={removeRequest} />)}</div></SortableContext>}</PersonalQueueDropZone>
               </section>
-              <section>
+              <section className="min-w-0">
                 <div className="relative mb-2 text-center"><h3 className="font-bold">Hive Queue</h3><span className="absolute right-0 top-0 text-sm text-gray-500">{playQueue.length}</span></div>
                 <HiveQueueDropZone>{playQueue.length === 0 ? <p className="p-3 text-sm text-gray-500">Upvoted requests will play here.</p> : <SortableContext items={movableTrackIds} strategy={verticalListSortingStrategy}><div className="space-y-2">{playQueue.map((track, index) => <QueueTrackItem key={track.videoId} track={track} index={index} isPlaying={track.videoId === nowPlayingId} canReorder={canManageQueue && (isMasterAccount || index >= firstMovableIndex)} canRemove={canManageQueue} canControlPlayback={canManageQueue} showUpvoteCount={canManageQueue} pendingAction={pendingTrackActionId !== null} onRemove={removeTrack} onUpvote={upvoteHiveTrack} onPlayNow={playTrackNow} onMoveToTop={moveTrackToTop} />)}</div></SortableContext>}</HiveQueueDropZone>
               </section>
