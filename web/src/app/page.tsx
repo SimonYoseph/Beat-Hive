@@ -1186,6 +1186,7 @@ function SphereCarousel({ userRole }: { userRole: string }) {
   };
 
   const handleClickItem = (item: any) => {
+    if (dragDistance.current >= 15) return;
     snapToItem(item);
   };
 

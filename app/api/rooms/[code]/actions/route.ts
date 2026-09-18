@@ -47,7 +47,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (settings.requestsPaused === true) return NextResponse.json({ error: "Requests are paused by the host." }, { status: 403 });
     if (settings.preventDuplicates !== false && requests.some((request) => request.videoId === track.videoId)) return NextResponse.json({ error: "This track has already been requested." }, { status: 409 });
     if (requests.length >= (typeof settings.maxRequests === "number" ? settings.maxRequests : 20)) return NextResponse.json({ error: "The room request limit has been reached." }, { status: 409 });
-    const nextState = { ...state, requests: [...requests, { ...track, upvotes: 0 }] };
+    const requestedTrack = { ...track, upvotes: 0 };
+    const queue = state.queue || [];
+    const shouldStartPlayback = !state.nowPlaying && queue.length === 0;
+    const nextState = {
+      ...state,
+      requests: [...requests, requestedTrack],
+      queue: shouldStartPlayback ? [requestedTrack] : queue,
+      nowPlaying: shouldStartPlayback ? requestedTrack : state.nowPlaying,
+      isPlaying: shouldStartPlayback || state.isPlaying,
+    };
     const { data, error } = await supabase.rpc("update_hive_room_state", { room_code: code, expected_version: room.version, next_state: nextState });
     if (error) return NextResponse.json({ error: "The room changed. Refresh and try again." }, { status: 409 });
     return NextResponse.json({ room: data });
