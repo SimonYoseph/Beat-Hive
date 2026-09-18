@@ -124,7 +124,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   if (!actorEmail) return NextResponse.json({ error: "Only a room host can control this session." }, { status: 403 });
   const { data: hostMembership } = await supabase.from("hive_room_hosts").select("room_id").eq("room_id", room.id).eq("email", actorEmail).maybeSingle();
-  if (!hostMembership && actorEmail !== MASTER_CONTROL_EMAIL) return NextResponse.json({ error: "Only a room host can control this session." }, { status: 403 });
+  const isPrimaryHost = actorEmail === room.host_email.toLowerCase();
+  const hasCoHostInviteAccess = request.cookies.get(`bh_room_access_${code}`)?.value === "host";
+  if (!isPrimaryHost && (!hostMembership || !hasCoHostInviteAccess) && actorEmail !== MASTER_CONTROL_EMAIL) return NextResponse.json({ error: "Only a room host can control this session." }, { status: 403 });
   if (body.action !== "host-state" || !isHostState(body.state) || typeof body.version !== "number") return NextResponse.json({ error: "Invalid room update." }, { status: 400 });
 
   const nextState = awardVibeRewards(room.state as RoomState, body.state);

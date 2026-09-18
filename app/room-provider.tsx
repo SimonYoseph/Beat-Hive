@@ -18,7 +18,7 @@ type RoomContextValue = {
   isLoading: boolean;
   refreshRoom: () => Promise<void>;
   createRoom: (name: string, coHostEmails?: string[], starterQueue?: RoomTrack[]) => Promise<SharedRoom>;
-  joinRoom: (code: string, displayName: string) => Promise<SharedRoom>;
+  joinRoom: (code: string, displayName: string, isCoHostInvite?: boolean) => Promise<SharedRoom>;
   requestTrack: (track: RoomTrack) => Promise<void>;
   voteForTrack: (videoId: string) => Promise<void>;
   sendFeedback: (feedback: Record<string, unknown>) => Promise<void>;
@@ -59,10 +59,12 @@ export function RoomProvider({ children }: { children: ReactNode }) {
   const hostUpdateChainRef = useRef(Promise.resolve());
 
   const setSharedRoom = (nextRoom: SharedRoom) => {
-    roomCodeRef.current = nextRoom.code;
-    roomRef.current = nextRoom;
-    setRoom(nextRoom);
-    applyRoom(nextRoom);
+    const isHost = nextRoom.isHost ?? window.localStorage.getItem("bh_room_access") === "host";
+    const roomWithAccess = { ...nextRoom, isHost };
+    roomCodeRef.current = roomWithAccess.code;
+    roomRef.current = roomWithAccess;
+    setRoom(roomWithAccess);
+    applyRoom(roomWithAccess);
   };
 
   const refreshRoom = async () => {
@@ -82,15 +84,18 @@ export function RoomProvider({ children }: { children: ReactNode }) {
     const response = await fetch("/api/rooms", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, coHostEmails, starterQueue }) });
     if (!response.ok) throw new Error(await readError(response));
     const data = await response.json() as { room: SharedRoom };
+    window.localStorage.setItem("bh_room_access", "host");
+    data.room.isHost = true;
     setSharedRoom(data.room);
     return data.room;
   };
 
-  const joinRoom = async (code: string, displayName: string) => {
-    const response = await fetch(`/api/rooms/${encodeURIComponent(code)}/join`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ displayName }) });
+  const joinRoom = async (code: string, displayName: string, isCoHostInvite = false) => {
+    const response = await fetch(`/api/rooms/${encodeURIComponent(code)}/join`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ displayName, isCoHostInvite }) });
     if (!response.ok) throw new Error(await readError(response));
     const data = await response.json() as { room: SharedRoom };
     window.localStorage.setItem("bh_joinedRoomCode", data.room.code);
+    window.localStorage.setItem("bh_room_access", data.room.isHost ? "host" : "guest");
     setSharedRoom(data.room);
     return data.room;
   };

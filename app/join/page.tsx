@@ -63,7 +63,8 @@ export default function JoinRoomPage() {
     const params = new URLSearchParams(window.location.search);
     const roomCode = params.get("room");
     if (!roomCode || (!session && !isGuest)) return;
-    void joinFromInvite(roomCode, session?.user?.name?.trim() || "Guest").then((room) => {
+    const isCoHostInvite = params.get("invite") === "cohost";
+    void joinFromInvite(roomCode, session?.user?.name?.trim() || "Guest", isCoHostInvite).then((room) => {
       handleJoinedRoom(room);
     }).catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Could not join this room."));
   }, [isGuest, router, session]);
