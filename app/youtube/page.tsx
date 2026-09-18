@@ -55,13 +55,14 @@ type QueueTrackItemProps = {
   canRemove: boolean;
   canControlPlayback: boolean;
   showUpvoteCount: boolean;
+  pendingAction: boolean;
   onRemove: (videoId: string) => void;
   onUpvote: (videoId: string) => void;
   onPlayNow: (track: RequestedTrack) => void;
   onMoveToTop: (videoId: string) => void;
 };
 
-function QueueTrackItem({ track, index, isPlaying, canReorder, canRemove, canControlPlayback, showUpvoteCount, onRemove, onUpvote, onPlayNow, onMoveToTop }: QueueTrackItemProps) {
+function QueueTrackItem({ track, index, isPlaying, canReorder, canRemove, canControlPlayback, showUpvoteCount, pendingAction, onRemove, onUpvote, onPlayNow, onMoveToTop }: QueueTrackItemProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: track.videoId,
     disabled: !canReorder,
@@ -83,17 +84,17 @@ function QueueTrackItem({ track, index, isPlaying, canReorder, canRemove, canCon
       <div className="col-span-2 flex w-full flex-col items-end gap-1">
         {isPlaying && <span className="inline-flex items-center gap-1 whitespace-nowrap text-[10px] font-bold text-red-400"><span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,.9)]" />Now Playing</span>}
         <div className="flex w-full flex-wrap justify-end gap-1">
-          {canControlPlayback && <button onClick={() => onPlayNow(track)} className="flex h-7 w-7 items-center justify-center rounded bg-emerald-500/20 text-emerald-300 hover:bg-emerald-400 hover:text-black" aria-label={`Play ${track.title} now`} title="Play now"><Play size={14} fill="currentColor" /></button>}
-          {canControlPlayback && <button onClick={() => onMoveToTop(track.videoId)} className="flex h-7 w-7 items-center justify-center rounded bg-white/5 text-gray-300 hover:bg-emerald-400 hover:text-black" aria-label={`Move ${track.title} to top of queue`} title="Move to top"><ArrowUp size={14} /></button>}
-          <button onClick={() => onUpvote(track.videoId)} className={`flex h-7 items-center justify-center rounded bg-white/5 text-xs text-gray-300 hover:bg-yellow-500 hover:text-black ${showUpvoteCount ? "gap-0.5 px-1.5" : "w-7"}`} aria-label={`Upvote ${track.title}`} title="Upvote">
+          {canControlPlayback && <button onClick={() => onPlayNow(track)} disabled={pendingAction} className="flex h-7 w-7 items-center justify-center rounded bg-emerald-500/20 text-emerald-300 hover:bg-emerald-400 hover:text-black disabled:cursor-wait disabled:opacity-50" aria-label={`Play ${track.title} now`} title="Play now"><Play size={14} fill="currentColor" /></button>}
+          {canControlPlayback && <button onClick={() => onMoveToTop(track.videoId)} disabled={pendingAction} className="flex h-7 w-7 items-center justify-center rounded bg-white/5 text-gray-300 hover:bg-emerald-400 hover:text-black disabled:cursor-wait disabled:opacity-50" aria-label={`Move ${track.title} to top of queue`} title="Move to top"><ArrowUp size={14} /></button>}
+          <button onClick={() => onUpvote(track.videoId)} disabled={pendingAction} className={`flex h-7 items-center justify-center rounded bg-white/5 text-xs text-gray-300 hover:bg-yellow-500 hover:text-black disabled:cursor-wait disabled:opacity-50 ${showUpvoteCount ? "gap-0.5 px-1.5" : "w-7"}`} aria-label={`Upvote ${track.title}`} title="Upvote">
             <ThumbsUp size={14} /> {showUpvoteCount && track.upvotes}
           </button>
           {canReorder && (
-            <button type="button" className="flex h-7 w-7 touch-none cursor-grab items-center justify-center rounded bg-white/5 text-gray-300 hover:bg-yellow-500 hover:text-black active:cursor-grabbing" aria-label={`Drag ${track.title} to reorder`} title="Drag to reorder" {...attributes} {...listeners}>
+            <button type="button" disabled={pendingAction} className="flex h-7 w-7 touch-none cursor-grab items-center justify-center rounded bg-white/5 text-gray-300 hover:bg-yellow-500 hover:text-black active:cursor-grabbing disabled:cursor-wait disabled:opacity-50" aria-label={`Drag ${track.title} to reorder`} title="Drag to reorder" {...attributes} {...listeners}>
               <Menu size={16} />
             </button>
           )}
-          {canRemove && <button onClick={() => onRemove(track.videoId)} className="flex h-7 w-7 items-center justify-center rounded bg-white/5 text-gray-400 hover:bg-red-500 hover:text-white" aria-label={`Remove ${track.title} from queue`} title="Remove from queue">
+          {canRemove && <button onClick={() => onRemove(track.videoId)} disabled={pendingAction} className="flex h-7 w-7 items-center justify-center rounded bg-white/5 text-gray-400 hover:bg-red-500 hover:text-white disabled:cursor-wait disabled:opacity-50" aria-label={`Remove ${track.title} from queue`} title="Remove from queue">
             <Trash2 size={13} />
           </button>}
         </div>
@@ -132,7 +133,7 @@ function DragTrackOverlay({ track }: { track: RequestedTrack }) {
 
 export default function YoutubePage() {
   const { data: session, status } = useSession();
-  const { setIsPlaying, setNowPlaying } = usePlayback();
+  const { nowPlaying, isPlaying, setIsPlaying, setNowPlaying } = usePlayback();
   const { room, requestTrack, updateHostState, voteForTrack } = useRoom();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -150,6 +151,8 @@ export default function YoutubePage() {
   const [isHost, setIsHost] = useState(false);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [isMasterControlEnabled, setIsMasterControlEnabled] = useState(true);
+  const [pendingTrackActionId, setPendingTrackActionId] = useState<string | null>(null);
+  const pendingTrackActionRef = useRef<string | null>(null);
   const [masterSettings, setMasterSettings] = useState<MasterSettings>(DEFAULT_MASTER_SETTINGS);
   const isMasterAccount = session?.user?.email?.toLowerCase() === MASTER_CONTROL_EMAIL && isMasterControlEnabled;
   const canManageQueue = isMasterAccount || isHost;
@@ -341,7 +344,7 @@ export default function YoutubePage() {
       setPlayQueue(nextPlayQueue);
       window.localStorage.setItem("bh_play_queue", JSON.stringify(nextPlayQueue));
     }
-    if (!nowPlayingId) {
+    if (!nowPlaying?.videoId) {
       if (!nextPlayQueue.some((track) => track.videoId === queuedTrack.videoId)) {
         nextPlayQueue = [...nextPlayQueue, requestedTrack];
         setPlayQueue(nextPlayQueue);
@@ -356,13 +359,27 @@ export default function YoutubePage() {
     }
   }
 
+  async function runTrackAction(videoId: string, action: () => Promise<void> | void) {
+    if (pendingTrackActionRef.current) return;
+    pendingTrackActionRef.current = videoId;
+    setPendingTrackActionId(videoId);
+    try {
+      await action();
+    } finally {
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 250));
+      pendingTrackActionRef.current = null;
+      setPendingTrackActionId(null);
+    }
+  }
+
   function upvoteHiveTrack(videoId: string) {
+    void runTrackAction(videoId, async () => {
     if (room) {
       if (canManageQueue) {
-        void updateHostState((state) => ({ ...state, requests: (state.requests || []).map((track) => track.videoId === videoId ? { ...track, upvotes: (track.upvotes || 0) + 1 } : track) })).catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Could not update the queue."));
+        await updateHostState((state) => ({ ...state, requests: (state.requests || []).map((track) => track.videoId === videoId ? { ...track, upvotes: (track.upvotes || 0) + 1 } : track) }));
         return;
       }
-      void voteForTrack(videoId).catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Could not register your vote."));
+      await voteForTrack(videoId);
       return;
     }
     if (!isMasterAccount && masterSettings.queueLocked) {
@@ -372,6 +389,7 @@ export default function YoutubePage() {
     const nextPlayQueue = playQueue.map((track) => track.videoId === videoId ? { ...track, upvotes: track.upvotes + 1 } : track);
     setPlayQueue(nextPlayQueue);
     window.localStorage.setItem("bh_play_queue", JSON.stringify(nextPlayQueue));
+    }).catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Could not update the queue."));
   }
 
   function removeRequest(videoId: string) {
@@ -474,13 +492,13 @@ export default function YoutubePage() {
   function removeTrack(videoId: string) {
     if (!canManageQueue) return;
     if (room) {
-      void updateHostState((state) => {
+      void runTrackAction(videoId, () => updateHostState((state) => {
         const queue = state.queue || [];
         const removedIndex = queue.findIndex((track) => track.videoId === videoId);
         const nextQueue = queue.filter((track) => track.videoId !== videoId);
         const nextTrack = state.nowPlaying?.videoId === videoId ? (queue[removedIndex + 1] || nextQueue[0] || null) : state.nowPlaying;
         return { ...state, queue: nextQueue, nowPlaying: nextTrack, isPlaying: Boolean(nextTrack) && state.isPlaying };
-      }).catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Could not update the queue."));
+      })).catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Could not update the queue."));
       return;
     }
     const nextQueue = playQueue.filter((track) => track.videoId !== videoId);
@@ -504,7 +522,7 @@ export default function YoutubePage() {
   function playTrackNow(track: RequestedTrack) {
     if (!canManageQueue) return;
     if (room) {
-      void updateHostState((state) => ({ ...state, nowPlaying: track, isPlaying: true })).catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Could not start this track."));
+      void runTrackAction(track.videoId, () => updateHostState((state) => ({ ...state, nowPlaying: track, isPlaying: true }))).catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Could not start this track."));
       return;
     }
     setNowPlaying(track);
@@ -516,11 +534,11 @@ export default function YoutubePage() {
   function moveTrackToTop(videoId: string) {
     if (!canManageQueue) return;
     if (room) {
-      void updateHostState((state) => {
+      void runTrackAction(videoId, () => updateHostState((state) => {
         const queue = state.queue || [];
         const index = queue.findIndex((track) => track.videoId === videoId);
         return index < 0 ? state : { ...state, queue: arrayMove(queue, index, 0) };
-      }).catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Could not update the queue."));
+      })).catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Could not update the queue."));
       return;
     }
     const trackIndex = playQueue.findIndex((track) => track.videoId === videoId);
@@ -658,7 +676,7 @@ export default function YoutubePage() {
               </section>
               <section>
                 <div className="relative mb-2 text-center"><h3 className="font-bold">Hive Queue</h3><span className="absolute right-0 top-0 text-sm text-gray-500">{playQueue.length}</span></div>
-                <HiveQueueDropZone>{playQueue.length === 0 ? <p className="p-3 text-sm text-gray-500">Upvoted requests will play here.</p> : <SortableContext items={movableTrackIds} strategy={verticalListSortingStrategy}><div className="space-y-2">{playQueue.map((track, index) => <QueueTrackItem key={track.videoId} track={track} index={index} isPlaying={track.videoId === nowPlayingId} canReorder={canManageQueue && (isMasterAccount || index >= firstMovableIndex)} canRemove={canManageQueue} canControlPlayback={canManageQueue} showUpvoteCount={canManageQueue} onRemove={removeTrack} onUpvote={upvoteHiveTrack} onPlayNow={playTrackNow} onMoveToTop={moveTrackToTop} />)}</div></SortableContext>}</HiveQueueDropZone>
+                <HiveQueueDropZone>{playQueue.length === 0 ? <p className="p-3 text-sm text-gray-500">Upvoted requests will play here.</p> : <SortableContext items={movableTrackIds} strategy={verticalListSortingStrategy}><div className="space-y-2">{playQueue.map((track, index) => <QueueTrackItem key={track.videoId} track={track} index={index} isPlaying={track.videoId === nowPlayingId} canReorder={canManageQueue && (isMasterAccount || index >= firstMovableIndex)} canRemove={canManageQueue} canControlPlayback={canManageQueue} showUpvoteCount={canManageQueue} pendingAction={pendingTrackActionId !== null} onRemove={removeTrack} onUpvote={upvoteHiveTrack} onPlayNow={playTrackNow} onMoveToTop={moveTrackToTop} />)}</div></SortableContext>}</HiveQueueDropZone>
               </section>
             </div><DragOverlay dropAnimation={null}>{isMasterAccount && activeDragTrack && <DragTrackOverlay track={activeDragTrack} />}</DragOverlay></DndContext>
           )}
