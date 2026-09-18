@@ -703,8 +703,9 @@ export default function YoutubePage() {
   return (
     <main className="min-h-[100dvh] bg-[#111] px-4 py-8 text-white sm:px-6 sm:py-12">
       <section className="mx-auto max-w-2xl">
+        <NextLink href="/?home=party" className="mb-6 inline-flex text-2xl font-black text-white transition-colors hover:text-yellow-400 sm:mb-8" aria-label="Return to Beat Hive home">Beat<span className="text-yellow-500">Hive</span></NextLink>
         <div className="mb-6 flex items-center gap-3 sm:mb-8">
-          <NextLink href="/" title="Back to Beat Hive" aria-label="Back to Beat Hive" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/5 text-gray-300 transition-colors hover:bg-yellow-500 hover:text-black">
+          <NextLink href="/?home=party" title="Back to party home" aria-label="Back to party home" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/5 text-gray-300 transition-colors hover:bg-yellow-500 hover:text-black">
             <ArrowLeft size={20} />
           </NextLink>
           <Music2 className="text-red-500" size={32} />

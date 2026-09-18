@@ -478,6 +478,16 @@ export default function BeatHiveApp() {
     return () => window.clearTimeout(timeout);
   }, [customIcon, energyPreference, hasAccess, isAnonymousDJ, lastShoutout, musicSource, remoteSettingsLoaded, selectedVibe, tipTotal, userEmail, userRole, viewMode]);
 
+  useEffect(() => {
+    if (!remoteSettingsLoaded || new URLSearchParams(window.location.search).get('home') !== 'party') return;
+    setUserRole('guest');
+    setHasAccess(true);
+    setViewMode('globe');
+    setDjPreviewingGuest(false);
+    setDjRoomActive(false);
+    window.history.replaceState(null, '', '/');
+  }, [remoteSettingsLoaded, setDjPreviewingGuest, setDjRoomActive, setHasAccess, setUserRole, setViewMode]);
+
   if (!isClient) return null; // Prevent hydration flash on first render
 
   const returnToSignIn = () => {
@@ -1245,10 +1255,12 @@ export default function BeatHiveApp() {
 
           {/* Centered Brand Header */}
           <header className="text-center">
+            <button type="button" onClick={() => { setUserRole('guest'); setHasAccess(true); setViewMode('globe'); setDjPreviewingGuest(false); setDjRoomActive(false); }} className="text-center" aria-label="Return to Beat Hive home">
             <h1 className="text-3xl font-black mb-1 text-white flex items-center justify-center gap-2">
               Beat<span className="text-yellow-500">Hive</span>
             </h1>
             <p className="text-xs text-yellow-500/80 uppercase tracking-widest font-bold">Live Queue Control</p>
+            </button>
           </header>
         </div>
 
