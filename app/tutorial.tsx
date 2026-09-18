@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 
 type TutorialRole = "host" | "guest";
+type TutorialPhase = "setup" | "session";
 
 type TutorialStep = {
   title: string;
@@ -16,7 +17,7 @@ type TutorialStep = {
   isWelcome?: boolean;
 };
 
-const HOST_STEPS: TutorialStep[] = [
+const HOST_SETUP_STEPS: TutorialStep[] = [
   {
     title: "Name your room",
     description: "Give your Hive a clear name.",
@@ -36,10 +37,45 @@ const HOST_STEPS: TutorialStep[] = [
   {
     title: "Start your session",
     description: "Start the party when you are ready.",
-    detail: "Manage the Hive Queue and track votes while songs advance automatically.",
+    detail: "Manage the Hive Queue and track votes while songs advance automatically. When the party is over, choose End Session from the dashboard and confirm the urgent prompt.",
     icon: ListMusic,
     target: "host-start-party",
     targetLabel: "Start Party",
+  },
+];
+
+const HOST_SESSION_STEPS: TutorialStep[] = [
+  {
+    title: "Invite the crowd",
+    description: "Open your QR code and let guests scan it.",
+    detail: "Each scan takes a guest straight into this live Hive after they identify themselves.",
+    icon: Users,
+    target: "host-share-qr",
+    targetLabel: "Let Crowd Scan",
+  },
+  {
+    title: "Watch the Hive Queue",
+    description: "Review requests and see what the crowd is supporting.",
+    detail: "Open the queue to manage song order and keep the session moving.",
+    icon: ListMusic,
+    target: "host-manage-queue",
+    targetLabel: "Hive Queue requests",
+  },
+  {
+    title: "See the guest experience",
+    description: "Switch to Hive View to see what guests can do.",
+    detail: "Hosts can request, vote, and share feedback too, so you can understand the crowd's experience.",
+    icon: Globe2,
+    target: "host-switch-to-hive",
+    targetLabel: "Switch to Hive View",
+  },
+  {
+    title: "End the session safely",
+    description: "Use End Session only when the party is over.",
+    detail: "The confirmation prompt makes sure you do not stop the Hive accidentally.",
+    icon: X,
+    target: "host-end-session-trigger",
+    targetLabel: "End session",
   },
 ];
 
@@ -95,13 +131,13 @@ const GUEST_STEPS: TutorialStep[] = [
   },
 ];
 
-export function Tutorial({ role }: { role: TutorialRole }) {
+export function Tutorial({ role, phase = "setup" }: { role: TutorialRole; phase?: TutorialPhase }) {
   const [isOpen, setIsOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [targetBounds, setTargetBounds] = useState<DOMRect | null>(null);
   const scrolledTargetRef = useRef<string | null>(null);
-  const steps = role === "host" ? HOST_STEPS : GUEST_STEPS;
-  const storageKey = `bh_tutorial_completed_${role}`;
+  const steps = role === "host" ? (phase === "setup" ? HOST_SETUP_STEPS : HOST_SESSION_STEPS) : GUEST_STEPS;
+  const storageKey = `bh_tutorial_completed_${role}_${phase}`;
   const step = steps[currentStep];
   const isWelcome = step.isWelcome === true;
   const isHivePreview = step.target === "guest-hive-action";
@@ -111,6 +147,18 @@ export function Tutorial({ role }: { role: TutorialRole }) {
     setCurrentStep(0);
     setIsOpen(window.localStorage.getItem(storageKey) !== "true");
   }, [storageKey]);
+
+  useEffect(() => {
+    const replayTutorial = (event: Event) => {
+      const detail = (event as CustomEvent<{ role?: TutorialRole; phase?: TutorialPhase }>).detail;
+      if (detail?.role !== role || (detail.phase || "setup") !== phase) return;
+      setCurrentStep(0);
+      scrolledTargetRef.current = null;
+      setIsOpen(true);
+    };
+    window.addEventListener("bh-replay-tutorial", replayTutorial);
+    return () => window.removeEventListener("bh-replay-tutorial", replayTutorial);
+  }, [phase, role]);
 
   useEffect(() => {
     if (!isOpen) return;

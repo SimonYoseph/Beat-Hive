@@ -72,12 +72,6 @@ const HIVE_ITEMS = [
 
 const MASTER_CONTROL_EMAIL = 'simon97862012@gmail.com';
 
-const TEST_SESSION_TRACKS = [
-  { videoId: 'dQw4w9WgXcQ', title: 'Rick Astley - Never Gonna Give You Up', channelTitle: 'Rick Astley', thumbnail: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg', upvotes: 0 },
-  { videoId: '5NV6Rdv1a3I', title: 'Daft Punk - Get Lucky', channelTitle: 'Daft Punk', thumbnail: 'https://i.ytimg.com/vi/5NV6Rdv1a3I/hqdefault.jpg', upvotes: 0 },
-  { videoId: '4NRXx6U8ABQ', title: 'The Weeknd - Blinding Lights', channelTitle: 'The Weeknd', thumbnail: 'https://i.ytimg.com/vi/4NRXx6U8ABQ/hqdefault.jpg', upvotes: 0 },
-];
-
 const TOTAL_TILES = 32; // Exactly 32 panels on a standard soccer ball
 const RADIUS = 185; // Perfectly tuned to avoid overlapping with 106px shapes
 
@@ -249,6 +243,26 @@ type SyncedSettings = {
   tipTotal?: number;
 };
 
+type PartyHistoryEntry = { code: string; name: string; occurredAt: string; joinedAt?: string };
+type PartyHistory = { hosted: PartyHistoryEntry[]; attended: PartyHistoryEntry[] };
+
+function PartyHistorySection({ history, isLoading }: { history: PartyHistory | null; isLoading: boolean }) {
+  const formatDate = (value: string) => new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(value));
+  const renderParties = (parties: PartyHistoryEntry[], emptyLabel: string) => {
+    if (isLoading) return <p className="text-xs text-gray-500">Loading...</p>;
+    if (parties.length === 0) return <p className="text-xs text-gray-500">{emptyLabel}</p>;
+    return <ul className="space-y-2">{parties.slice(0, 4).map((party) => <li key={`${party.code}-${party.joinedAt || party.occurredAt}`} className="min-w-0"><p className="truncate text-xs font-bold text-white">{party.name}</p><p className="mt-0.5 text-[11px] text-gray-500">{formatDate(party.joinedAt || party.occurredAt)}</p></li>)}</ul>;
+  };
+
+  return <section className="border border-white/10 bg-[#111] p-4">
+    <h3 className="text-sm font-bold uppercase tracking-widest text-gray-400">Party History</h3>
+    <div className="mt-4 grid grid-cols-2 gap-4">
+      <div className="min-w-0"><p className="mb-2 text-xs font-bold text-yellow-500">Hosted</p>{renderParties(history?.hosted || [], 'No hosted parties yet.')}</div>
+      <div className="min-w-0"><p className="mb-2 text-xs font-bold text-yellow-500">Attended</p>{renderParties(history?.attended || [], 'No attended parties yet.')}</div>
+    </div>
+  </section>;
+}
+
 // Main Entry Component
 export default function BeatHiveApp() {
   const { data: session } = useSession();
@@ -281,17 +295,44 @@ export default function BeatHiveApp() {
   // App navigation state
   const [viewMode, setViewMode] = usePersistedState<'globe' | 'list'>('bh_viewMode', 'globe');
   const [showSettings, setShowSettings] = usePersistedState('bh_showSettings', false);
+  const [partyHistory, setPartyHistory] = useState<PartyHistory | null>(null);
+  const [isPartyHistoryLoading, setIsPartyHistoryLoading] = useState(false);
   const [showMusicSources, setShowMusicSources] = useState(false);
   const [musicSource, setMusicSource] = usePersistedState<'spotify' | 'apple' | 'youtube' | null>('bh_musicSource', null);
   const [customIcon, setCustomIcon] = usePersistedState<string | null>('bh_customIcon', null);
+  const profileImage = customIcon ?? session?.user?.image ?? null;
   const customIconInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (authProvider === 'google' && musicSource === null) setMusicSource('youtube');
   }, [authProvider, musicSource, setMusicSource]);
 
+  useEffect(() => {
+    let isCurrent = true;
+    if (!userEmail) {
+      setPartyHistory(null);
+      setIsPartyHistoryLoading(false);
+      return () => { isCurrent = false; };
+    }
+
+    setIsPartyHistoryLoading(true);
+    void fetch('/api/profile/history').then(async (response) => {
+      if (!response.ok) return null;
+      return response.json() as Promise<PartyHistory>;
+    }).then((history) => {
+      if (isCurrent && history) setPartyHistory(history);
+    }).catch(() => {
+      if (isCurrent) setPartyHistory(null);
+    }).finally(() => {
+      if (isCurrent) setIsPartyHistoryLoading(false);
+    });
+
+    return () => { isCurrent = false; };
+  }, [userEmail]);
+
   // DJ State
   const [djRoomActive, setDjRoomActive] = usePersistedState('bh_djRoomActive', false);
+  const [hostSetupRequested, setHostSetupRequested] = useState(false);
   const [isPartyCreator, setIsPartyCreator] = usePersistedState('bh_isPartyCreator', false);
   const [isMasterControlEnabled, setIsMasterControlEnabled] = usePersistedState('bh_masterControlEnabled', true);
   const [isAnonymousDJ, setIsAnonymousDJ] = usePersistedState('bh_isAnonymousDJ', false);
@@ -301,14 +342,15 @@ export default function BeatHiveApp() {
   const [tipTotal, setTipTotal] = usePersistedState('bh_tipTotal', 0);
   const [djPreviewingGuest, setDjPreviewingGuest] = usePersistedState('bh_djPreviewingGuest', false);
   const [djQrExpanded, setDjQrExpanded] = usePersistedState('bh_djQrExpanded', false);
-  const [roomName, setRoomName] = usePersistedState('bh_roomName', 'Friday Night Live');
+  const [roomName, setRoomName] = usePersistedState('bh_roomName', '');
+  const [coHostInput, setCoHostInput] = useState('');
+  const [openingVibe, setOpeningVibe] = useState('');
   const [roomCode, setRoomCode] = usePersistedState('bh_roomCode', '');
-  const [joinedRoom] = usePersistedState<{ code: string; hostName: string; hostEmail: string; roomName: string } | null>('bh_joinedRoom', null);
+  const [joinedRoom, setJoinedRoom] = usePersistedState<{ code: string; hostName: string; hostEmail: string; roomName: string } | null>('bh_joinedRoom', null);
   const [shareStatus, setShareStatus] = useState('');
+  const [showEndSessionConfirm, setShowEndSessionConfirm] = useState(false);
   const [newRequestCount, setNewRequestCount] = useState(0);
   const [viewedRequestIds, setViewedRequestIds] = usePersistedState<string[]>('bh_viewedRequestIds', []);
-  const hasSeededActiveSession = useRef(false);
-
   // Guest State
   const [qrExpanded, setQrExpanded] = usePersistedState('bh_qrExpanded', false);
   const [remoteSettingsLoaded, setRemoteSettingsLoaded] = useState(false);
@@ -366,26 +408,6 @@ export default function BeatHiveApp() {
       setViewedRequestIds([]);
     }
   };
-
-  useEffect(() => {
-    if (userRole !== 'dj' || !djRoomActive || hasSeededActiveSession.current) return;
-
-    try {
-      const requests = JSON.parse(window.localStorage.getItem('bh_youtube_requests') || '[]') as unknown[];
-      const queue = JSON.parse(window.localStorage.getItem('bh_play_queue') || '[]') as unknown[];
-      if (requests.length === 0 && queue.length === 0) {
-        window.localStorage.setItem('bh_youtube_requests', JSON.stringify(TEST_SESSION_TRACKS));
-        window.localStorage.setItem('bh_play_queue', JSON.stringify(TEST_SESSION_TRACKS));
-        window.dispatchEvent(new Event('bh-playback-change'));
-      }
-    } catch {
-      window.localStorage.setItem('bh_youtube_requests', JSON.stringify(TEST_SESSION_TRACKS));
-      window.localStorage.setItem('bh_play_queue', JSON.stringify(TEST_SESSION_TRACKS));
-      window.dispatchEvent(new Event('bh-playback-change'));
-    } finally {
-      hasSeededActiveSession.current = true;
-    }
-  }, [djRoomActive, userRole]);
 
   useEffect(() => {
     let isCurrent = true;
@@ -447,18 +469,42 @@ export default function BeatHiveApp() {
     window.scrollTo(0, 0);
   };
 
+  const returnToSignIn = () => {
+    window.localStorage.removeItem('bh_isAuthenticated');
+    window.localStorage.removeItem('bh_userRole');
+    window.localStorage.removeItem('bh_djRoomActive');
+    setIsAuthenticated(false);
+    setUserRole('none');
+    setDjRoomActive(false);
+    window.scrollTo(0, 0);
+  };
+
   const handleSelectRole = (role: 'dj' | 'guest') => {
+    if (role === 'dj' && !userEmail) {
+      returnToSignIn();
+      return;
+    }
+    setHostSetupRequested(role === 'dj');
     setUserRole(role);
     window.scrollTo(0, 0);
   };
 
   const handleStartDJRoom = async () => {
     if (!userEmail) {
-      alert('Sign in before starting a DJ room.');
+      returnToSignIn();
       return;
     }
     try {
-      const room = await createRoom(roomName);
+      const coHostEmails = coHostInput.split(/[\n,]/).map((email) => email.trim()).filter(Boolean);
+      let starterQueue: { videoId: string; title: string; channelTitle: string; thumbnail?: string }[] = [];
+      if (openingVibe) {
+        const response = await fetch(`/api/youtube/search?q=${encodeURIComponent(`${openingVibe} party music`)}`);
+        if (response.ok) {
+          const { items } = (await response.json()) as { items?: YoutubeSearchResult[] };
+          starterQueue = (items || []).flatMap((item) => item.id.videoId ? [{ videoId: item.id.videoId, title: item.snippet.title, channelTitle: item.snippet.channelTitle, thumbnail: item.snippet.thumbnails.medium?.url || item.snippet.thumbnails.default?.url }] : []).slice(0, 5);
+        }
+      }
+      const room = await createRoom(roomName, coHostEmails, starterQueue);
       setRoomCode(room.code);
       setRoomName(room.name);
       setIsPartyCreator(true);
@@ -493,6 +539,34 @@ export default function BeatHiveApp() {
   const handleScanAccess = () => {
     setHasAccess(true);
     window.scrollTo(0, 0);
+  };
+
+  const replayTutorial = (role: 'host' | 'guest', phase: 'setup' | 'session' = 'setup') => {
+    window.dispatchEvent(new CustomEvent('bh-replay-tutorial', { detail: { role, phase } }));
+  };
+
+  const endSession = () => {
+    if (userRole !== 'dj') return;
+    setShowEndSessionConfirm(false);
+    setDjQrExpanded(false);
+    setDjPreviewingGuest(false);
+    setDjRoomActive(false);
+    setHostSetupRequested(false);
+    setIsPartyCreator(false);
+    setIsPlaying(false);
+    window.dispatchEvent(new Event('bh-host-session-change'));
+    window.scrollTo(0, 0);
+  };
+
+  const leaveSession = () => {
+    window.localStorage.removeItem('bh_joinedRoomCode');
+    window.localStorage.removeItem('bh_roomCode');
+    window.localStorage.removeItem('bh_roomName');
+    window.localStorage.removeItem('bh_masterSettings');
+    setJoinedRoom(null);
+    setHasAccess(false);
+    setQrExpanded(false);
+    window.location.assign('/');
   };
 
   const recordPlayedTrack = () => {
@@ -672,6 +746,39 @@ export default function BeatHiveApp() {
 
   // State 1: User needs to Sign In / Create Account
   const isUserLoggedIn = isAuthenticated || Boolean(session);
+  const hostProfileSettings = showSettings && (
+    <AnimatePresence>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[10002] flex items-end bg-black/80 p-4 sm:items-center sm:justify-center" role="dialog" aria-modal="true" aria-labelledby="host-profile-title">
+        <motion.section initial={{ y: 32, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 32, opacity: 0 }} className="w-full max-w-md rounded-xl border border-white/10 bg-[#1a1a1a] p-6 shadow-2xl">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 id="host-profile-title" className="text-2xl font-black text-white">Profile</h2>
+              <p className="mt-1 text-sm text-gray-400">Your host and guest views use the same image.</p>
+            </div>
+            <button type="button" onClick={() => setShowSettings(false)} aria-label="Close profile settings" className="rounded-full p-2 text-gray-400 transition-colors hover:bg-white/10 hover:text-white"><X size={20} /></button>
+          </div>
+          <div className="mt-6 flex items-center gap-4">
+            <div className="relative flex h-14 w-14 shrink-0 items-center justify-center bg-gradient-to-br from-yellow-400 to-yellow-500 [clip-path:polygon(50%_0%,100%_25%,100%_75%,50%_100%,0%_75%,0%_25%)]">
+              {profileImage ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={profileImage} alt="Your profile" className="absolute inset-0 h-full w-full object-cover" />
+              ) : <User size={22} className="text-black" />}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-bold text-white">{session?.user?.name || userEmail || 'Beat Hive account'}</p>
+              <p className="mt-1 text-xs text-gray-500">Upload a custom image or use your account photo.</p>
+            </div>
+          </div>
+          <div className="mt-6"><PartyHistorySection history={partyHistory} isLoading={isPartyHistoryLoading} /></div>
+          <input ref={customIconInputRef} type="file" accept="image/*" className="hidden" onChange={handleCustomIconUpload} />
+          <div className="mt-6 flex gap-3">
+            <button type="button" onClick={() => customIconInputRef.current?.click()} className="flex-1 rounded-lg bg-yellow-500 py-3 text-sm font-bold text-black transition-colors hover:bg-yellow-400">Upload image</button>
+            {customIcon && <button type="button" onClick={() => setCustomIcon(null)} className="flex-1 rounded-lg border border-white/15 py-3 text-sm font-bold text-white transition-colors hover:bg-white/10">Use account photo</button>}
+          </div>
+        </motion.section>
+      </motion.div>
+    </AnimatePresence>
+  );
   if (!isUserLoggedIn) {
     return (
       <main className="min-h-[100dvh] flex flex-col items-center justify-center p-6 text-center bg-[#111] overflow-hidden relative">
@@ -731,7 +838,7 @@ export default function BeatHiveApp() {
   }
 
   // State 2: Select Role (DJ vs Guest)
-  if (userRole === 'none') {
+  if (userRole === 'none' || (userRole === 'dj' && !djRoomActive && !hostSetupRequested)) {
     return (
       <main className="min-h-[100dvh] flex flex-col items-center justify-center p-6 text-center bg-[#111] relative">
         <button
@@ -787,7 +894,7 @@ export default function BeatHiveApp() {
   }
 
   const isMasterAccount = userEmail?.toLowerCase() === MASTER_CONTROL_EMAIL;
-  const isMasterController = isMasterAccount && isMasterControlEnabled;
+  const isMasterController = userRole === 'dj' && isMasterAccount && isMasterControlEnabled;
 
   // State 3A: DJ Mode (Room Setup & Dashboard)
   if (userRole === 'dj') {
@@ -795,8 +902,14 @@ export default function BeatHiveApp() {
       return (
         <main className="min-h-[100dvh] flex flex-col items-center justify-center p-6 text-center bg-[#111]">
           <div className="max-w-md w-full bg-[#1a1a1a] p-8 rounded-3xl border border-white/5 shadow-2xl relative">
-            <button onClick={() => setUserRole('none')} className="absolute top-6 left-6 text-gray-500 hover:text-white">
+            <button onClick={() => { setHostSetupRequested(false); setUserRole('none'); }} className="absolute top-6 left-6 text-gray-500 hover:text-white">
               <X size={20} />
+            </button>
+            <button type="button" onClick={() => setShowSettings(true)} aria-label="Open profile settings" className="absolute right-6 top-6 flex h-10 w-10 items-center justify-center bg-gradient-to-br from-yellow-400 to-yellow-500 text-black [clip-path:polygon(50%_0%,100%_25%,100%_75%,50%_100%,0%_75%,0%_25%)]">
+              {profileImage ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={profileImage} alt="Your profile" className="absolute inset-0 h-full w-full object-cover" />
+              ) : <User size={18} />}
             </button>
             <div className="w-16 h-16 bg-yellow-500/10 text-yellow-500 rounded-full flex items-center justify-center mx-auto mb-6">
               <Settings2 size={28} />
@@ -829,6 +942,19 @@ export default function BeatHiveApp() {
                   />
                 </button>
               </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider pl-1" htmlFor="co-host-emails">Additional Hive Hosts</label>
+                <input id="co-host-emails" type="text" value={coHostInput} onChange={(event) => setCoHostInput(event.target.value)} placeholder="host@example.com, cohost@example.com" className="w-full bg-[#111] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500" />
+                <p className="text-xs text-gray-500">Optional. Add up to 10 signed-in accounts.</p>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider pl-1" htmlFor="opening-vibe">Opening Vibe</label>
+                <select id="opening-vibe" value={openingVibe} onChange={(event) => setOpeningVibe(event.target.value)} className="w-full bg-[#111] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500">
+                  <option value="">Start with an empty queue</option>
+                  {GENRE_TALLIES.map((genre) => <option key={genre.name} value={genre.name}>{genre.name}</option>)}
+                </select>
+                <p className="text-xs text-gray-500">Choose a genre to add up to five opening tracks.</p>
+              </div>
             </div>
 
             <button data-tutorial-target="host-start-party"
@@ -838,6 +964,7 @@ export default function BeatHiveApp() {
               Start Party
             </button>
           </div>
+          {hostProfileSettings}
           <Tutorial role="host" />
         </main>
       );
@@ -866,12 +993,20 @@ export default function BeatHiveApp() {
                   {isAnonymousDJ ? 'Incognito Mode On' : 'Incognito Mode Off'}
                 </button>
               </div>
-              <button onClick={() => { setDjRoomActive(false); window.dispatchEvent(new Event('bh-host-session-change')); }} className="w-10 h-10 bg-red-500/10 text-red-500 rounded-full flex items-center justify-center hover:bg-red-500/20 transition-colors">
-                <X size={20} />
-              </button>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => setShowSettings(true)} title="Open profile settings" aria-label="Open profile settings" className="relative flex h-10 w-10 items-center justify-center overflow-hidden bg-gradient-to-br from-yellow-400 to-yellow-500 text-black [clip-path:polygon(50%_0%,100%_25%,100%_75%,50%_100%,0%_75%,0%_25%)]">
+                  {profileImage ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={profileImage} alt="Your profile" className="absolute inset-0 h-full w-full object-cover" />
+                  ) : <User size={18} />}
+                </button>
+                <button data-tutorial-target="host-end-session-trigger" onClick={() => setShowEndSessionConfirm(true)} title="End session" aria-label="End session" className="w-10 h-10 bg-red-500/10 text-red-500 rounded-full flex items-center justify-center hover:bg-red-500 hover:text-white transition-colors">
+                  <X size={20} />
+                </button>
+              </div>
             </header>
 
-            <button
+            <button data-tutorial-target="host-switch-to-hive"
               onClick={() => setDjPreviewingGuest(true)}
               className="w-full rounded-xl border-4 border-red-400 bg-yellow-500 py-3.5 font-black text-black shadow-[0_0_0_5px_rgba(248,113,113,.25),0_12px_30px_rgba(245,158,11,.22)] transition-all hover:bg-yellow-400 active:scale-[.98] flex items-center justify-center gap-2"
             >
@@ -885,7 +1020,7 @@ export default function BeatHiveApp() {
             </NextLink>}
 
             <div className="bg-white rounded-3xl p-6 flex flex-col items-center justify-center relative overflow-hidden shadow-xl">
-             <button 
+             <button data-tutorial-target="host-share-qr"
                 onClick={() => setDjQrExpanded(!djQrExpanded)} 
                 className="w-full flex items-center justify-between"
              >
@@ -923,7 +1058,7 @@ export default function BeatHiveApp() {
           </div>
 
           <div className="grid grid-cols-2 gap-4 flex-1">
-             <NextLink href="/youtube" onClick={acknowledgeRequests} className="bg-[#1a1a1a] rounded-2xl p-4 border border-white/5 flex flex-col transition-colors hover:border-yellow-500/50">
+             <NextLink data-tutorial-target="host-manage-queue" href="/youtube" onClick={acknowledgeRequests} className="bg-[#1a1a1a] rounded-2xl p-4 border border-white/5 flex flex-col transition-colors hover:border-yellow-500/50">
                 <Search className="text-yellow-500 mb-2" size={24} />
                <span className="text-3xl font-black text-white">{newRequestCount}</span>
                 <span className="text-sm text-gray-400 font-medium">New Hive Queue Requests</span>
@@ -943,6 +1078,21 @@ export default function BeatHiveApp() {
              </div>
           </div>
         </div>
+          {hostProfileSettings}
+          <Tutorial role="host" phase="session" />
+          <AnimatePresence>
+            {showEndSessionConfirm && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[10001] flex items-end bg-black/80 p-4 sm:items-center sm:justify-center" role="dialog" aria-modal="true" aria-labelledby="end-session-title">
+              <motion.section initial={{ y: 32, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 32, opacity: 0 }} className="w-full max-w-md rounded-xl border border-red-500/50 bg-[#1a1a1a] p-6 shadow-2xl">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-500/15 text-red-400"><ShieldAlert size={24} /></div>
+                <h2 id="end-session-title" className="mt-5 text-2xl font-black text-white">End this session?</h2>
+                <p className="mt-2 text-sm leading-6 text-gray-300">This stops the live party and removes your host controls. Guests will no longer be able to use this session.</p>
+                <div className="mt-6 flex gap-3">
+                  <button type="button" onClick={() => setShowEndSessionConfirm(false)} className="flex-1 rounded-lg border border-white/15 py-3 text-sm font-bold text-white hover:bg-white/10">Keep session live</button>
+                  <button data-tutorial-target="host-end-session" type="button" onClick={endSession} className="flex-1 rounded-lg bg-red-500 py-3 text-sm font-black text-white hover:bg-red-400">End session</button>
+                </div>
+              </motion.section>
+            </motion.div>}
+          </AnimatePresence>
       </main>
       );
     }
@@ -1028,7 +1178,7 @@ export default function BeatHiveApp() {
     );
   }
 
-  const canManageRoom = isMasterController || (!isMasterAccount && isPartyCreator);
+  const canSwitchRole = Boolean(userEmail);
 
   const hasPreviousTrack = (() => {
     try {
@@ -1066,9 +1216,9 @@ export default function BeatHiveApp() {
               className="absolute left-2 z-50 h-10 w-10 bg-gradient-to-br from-yellow-400 to-yellow-500 hover:from-yellow-300 hover:to-yellow-400 transition-all duration-300 flex items-center justify-center [clip-path:polygon(50%_0%,100%_25%,100%_75%,50%_100%,0%_75%,0%_25%)] shadow-lg shadow-yellow-500/30 active:scale-95 sm:left-8 sm:h-14 sm:w-14"
               aria-label="Open profile settings"
             >
-              {customIcon ? (
+              {profileImage ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={customIcon} alt="Your custom icon" className="absolute inset-0 h-full w-full object-cover shape-octagon" />
+                <img src={profileImage} alt="Your profile" className="absolute inset-0 h-full w-full object-cover shape-octagon" />
               ) : (
                 <User size={20} className="text-black" />
               )}
@@ -1193,7 +1343,7 @@ export default function BeatHiveApp() {
 
       </div>
 
-      <Tutorial role="guest" />
+      {userRole === 'guest' && <Tutorial role="guest" />}
 
       {/* Settings Modal Layer using AnimatePresence */}
       <AnimatePresence>
@@ -1230,9 +1380,9 @@ export default function BeatHiveApp() {
                     <div className="flex min-w-0 flex-1 items-center gap-3">
                       <div className="w-12 h-14 shrink-0 relative flex items-center justify-center">
                         <div className="absolute inset-0 bg-gradient-to-br from-yellow-400 to-yellow-500 shape-octagon" />
-                        {customIcon ? (
+                        {profileImage ? (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={customIcon} alt="Your custom icon preview" className="absolute inset-0 h-full w-full object-cover shape-octagon" />
+                          <img src={profileImage} alt="Your profile preview" className="absolute inset-0 h-full w-full object-cover shape-octagon" />
                         ) : (
                           <User size={20} className="relative z-10 text-black" />
                         )}
@@ -1254,6 +1404,7 @@ export default function BeatHiveApp() {
                       )}
                     </div>
                   </div>
+                  <div className="mt-4"><PartyHistorySection history={partyHistory} isLoading={isPartyHistoryLoading} /></div>
                   {session && (
                     <button
                       onClick={() => {
@@ -1265,21 +1416,20 @@ export default function BeatHiveApp() {
                       <LogOut size={17} /> Sign out
                     </button>
                   )}
-                </div>
-                {isMasterAccount && <div>
-                  <h3 className="mb-3 text-sm font-bold uppercase tracking-widest text-gray-400">Omni Control</h3>
-                  <button onClick={() => setIsMasterControlEnabled((enabled) => !enabled)} role="switch" aria-checked={isMasterControlEnabled} className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-[#111] p-4 text-left transition-colors hover:border-yellow-500/50">
-                    <span className="text-sm font-bold text-white">Omni Control</span>
-                    <span className={`relative h-6 w-11 rounded-full transition-colors ${isMasterControlEnabled ? 'bg-yellow-500' : 'bg-gray-700'}`}><span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-transform ${isMasterControlEnabled ? 'left-6' : 'left-1'}`} /></span>
+                  <button type="button" onClick={() => replayTutorial(userRole === 'dj' ? 'host' : 'guest', userRole === 'dj' && djRoomActive ? 'session' : 'setup')} className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-white/15 bg-[#111] px-4 py-3 text-sm font-bold text-gray-200 transition-colors hover:border-yellow-500/50 hover:text-yellow-500">
+                    <Play size={16} fill="currentColor" /> Replay {userRole === 'dj' ? 'Hive Host' : 'Hive User'} Tutorial
                   </button>
-                </div>}
-                {canManageRoom && <div>
-                  <h3 className="mb-3 text-sm font-bold uppercase tracking-widest text-gray-400">View As</h3>
+                  {userRole === 'guest' && joinedRoom && <button type="button" onClick={leaveSession} className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-red-500/50 bg-red-500/10 px-4 py-3 text-sm font-bold text-red-300 transition-colors hover:bg-red-500 hover:text-white">
+                    <LogOut size={16} /> Leave session
+                  </button>}
+                </div>
+                {canSwitchRole && <div>
+                  <h3 className="mb-3 text-sm font-bold uppercase tracking-widest text-gray-400">Use Beat Hive As</h3>
                   <div className="grid grid-cols-2 rounded-xl border border-white/10 bg-[#111] p-1">
-                    <button onClick={() => { setUserRole('guest'); setShowSettings(false); }} className={`flex items-center justify-center gap-2 rounded-lg py-3 text-sm font-bold transition-colors ${userRole === 'guest' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-white'}`} aria-pressed={userRole === 'guest'}>
+                    <button onClick={() => { setUserRole('guest'); setHasAccess(false); setShowSettings(false); }} className={`flex items-center justify-center gap-2 rounded-lg py-3 text-sm font-bold transition-colors ${userRole === 'guest' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-white'}`} aria-pressed={userRole === 'guest'}>
                       <User size={17} /> Guest
                     </button>
-                    <button onClick={() => { setUserRole('dj'); setDjRoomActive(true); setShowSettings(false); }} className={`flex items-center justify-center gap-2 rounded-lg py-3 text-sm font-bold transition-colors ${userRole === 'dj' ? 'bg-yellow-500 text-black' : 'text-gray-500 hover:text-yellow-500'}`} aria-pressed={userRole === 'dj'}>
+                    <button onClick={() => { setHostSetupRequested(true); setUserRole('dj'); setDjRoomActive(false); setIsPartyCreator(false); setShowSettings(false); }} className={`flex items-center justify-center gap-2 rounded-lg py-3 text-sm font-bold transition-colors ${userRole === 'dj' ? 'bg-yellow-500 text-black' : 'text-gray-500 hover:text-yellow-500'}`} aria-pressed={userRole === 'dj'}>
                       <Headphones size={17} /> Hive Host
                     </button>
                   </div>
@@ -1514,10 +1664,12 @@ function SphereCarousel({ userRole, energyPreference, onEnergyChange, selectedVi
   const rotY = useMotionValue(initTargetY);
   
   const [activeId, setActiveId] = useState(ALL_ITEMS[0].id);
+  const [globeScale, setGlobeScale] = useState(1);
 
   const isDragging = useRef(false);
   const isSnapping = useRef(false);
   const dragDistance = useRef(0);
+  const dragThreshold = useRef(12);
   const didDragRef = useRef(false);
   const prevTouch = useRef<{ x: number; y: number } | null>(null);
   const velocity = useRef({ x: 0, y: 0 });
@@ -1532,8 +1684,34 @@ function SphereCarousel({ userRole, energyPreference, onEnergyChange, selectedVi
     }
   };
 
+  const startInertia = () => {
+    let previousFrame = performance.now();
+    const continueMotion = (now: number) => {
+      const elapsed = Math.min(32, now - previousFrame);
+      previousFrame = now;
+      if (Math.hypot(velocity.current.x, velocity.current.y) < 0.00015) {
+        stopInertia();
+        return;
+      }
+
+      const VERTICAL_LIMIT = Math.PI / 2.2;
+      rotX.set(Math.max(-VERTICAL_LIMIT, Math.min(VERTICAL_LIMIT, rotX.get() + velocity.current.y * elapsed)));
+      rotY.set(rotY.get() + velocity.current.x * elapsed);
+      velocity.current = { x: velocity.current.x * 0.91, y: velocity.current.y * 0.91 };
+      animFrameRef.current = requestAnimationFrame(continueMotion);
+    };
+    animFrameRef.current = requestAnimationFrame(continueMotion);
+  };
+
   useEffect(() => {
     return () => stopInertia();
+  }, []);
+
+  useEffect(() => {
+    const updateGlobeScale = () => setGlobeScale(window.innerWidth < 640 ? 0.72 : 1);
+    updateGlobeScale();
+    window.addEventListener('resize', updateGlobeScale);
+    return () => window.removeEventListener('resize', updateGlobeScale);
   }, []);
 
   const snapToItem = (item: any) => {
@@ -1595,6 +1773,7 @@ function SphereCarousel({ userRole, energyPreference, onEnergyChange, selectedVi
     isSnapping.current = false;
     isDragging.current = true;
     dragDistance.current = 0;
+    dragThreshold.current = e.pointerType === 'touch' ? 12 : 8;
     didDragRef.current = false;
     prevTouch.current = { x: e.clientX, y: e.clientY };
     lastTime.current = performance.now();
@@ -1614,10 +1793,10 @@ function SphereCarousel({ userRole, energyPreference, onEnergyChange, selectedVi
     const dy = e.clientY - prevTouch.current.y;
     
     dragDistance.current += Math.hypot(dx, dy);
-    if (dragDistance.current >= 15) didDragRef.current = true;
+    if (dragDistance.current >= dragThreshold.current) didDragRef.current = true;
 
-    // Natural 1:1 spherical arc rotation (Apple Maps / Google Maps feel)
-    const SENSITIVITY = 1 / 185;
+    // Keep the smaller mobile globe responsive to the same finger movement.
+    const SENSITIVITY = 1 / (185 * globeScale);
     const dRotY = dx * SENSITIVITY;
     const dRotX = -dy * SENSITIVITY;
 
@@ -1646,8 +1825,6 @@ function SphereCarousel({ userRole, energyPreference, onEnergyChange, selectedVi
     if (!isDragging.current) return;
     isDragging.current = false;
     prevTouch.current = null;
-    velocity.current = { x: 0, y: 0 };
-    stopInertia();
 
     try {
       if (e.currentTarget.hasPointerCapture?.(e.pointerId)) {
@@ -1655,6 +1832,12 @@ function SphereCarousel({ userRole, energyPreference, onEnergyChange, selectedVi
       }
     } catch {}
 
+    if (didDragRef.current) {
+      startInertia();
+      return;
+    }
+
+    velocity.current = { x: 0, y: 0 };
     if (!didDragRef.current) {
       const targetElement = document.elementFromPoint(e.clientX, e.clientY);
       const itemElement = targetElement?.closest<HTMLElement>("[data-item-id]");
@@ -1668,10 +1851,6 @@ function SphereCarousel({ userRole, energyPreference, onEnergyChange, selectedVi
   };
 
   const handleClickItem = (item: any) => {
-    if (didDragRef.current) {
-      didDragRef.current = false;
-      return;
-    }
     if (item.id.replace(/-\d+$/, '') === 'hive') {
       window.location.assign('/hive');
       return;
@@ -1685,25 +1864,24 @@ function SphereCarousel({ userRole, energyPreference, onEnergyChange, selectedVi
     <div className="relative mx-auto mt-2 flex w-full max-w-[420px] flex-1 flex-col items-center justify-start">
       {/* Universal Drag Container allowing all axes */}
       <div 
-        className="relative w-full h-[380px] flex items-center justify-center cursor-grab active:cursor-grabbing shrink-0 select-none overflow-hidden"
+        className="relative h-[300px] w-full shrink-0 select-none overflow-hidden sm:h-[380px]"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
-        onPointerLeave={handlePointerUp}
         onPointerCancel={handlePointerUp}
         style={{ perspective: "1000px", transformStyle: "preserve-3d", touchAction: 'none', WebkitTapHighlightColor: 'transparent' }}
       >
         {/* Aesthetic Apple-Maps-style Globe bounds wrapping the clustered shapes */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[330px] h-[330px] rounded-full bg-gradient-to-tr from-yellow-500/10 to-transparent border border-white/5 shadow-[inset_0_0_20px_rgba(255,255,255,0.05),0_0_40px_rgba(0,0,0,0.5)] pointer-events-none">
+        <div style={{ width: `${330 * globeScale}px`, height: `${330 * globeScale}px` }} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/5 bg-gradient-to-tr from-yellow-500/10 to-transparent shadow-[inset_0_0_20px_rgba(255,255,255,0.05),0_0_40px_rgba(0,0,0,0.5)] pointer-events-none">
         </div>
         {HIVE_ITEMS_3D.map((item) => (
-          <SphereItem key={item.id} item={item} rotX={rotX} rotY={rotY} isActive={activeId === item.id} onClick={() => handleClickItem(item)} />
+          <SphereItem key={item.id} item={item} rotX={rotX} rotY={rotY} globeScale={globeScale} isActive={activeId === item.id} />
         ))}
       </div>
-      <p className="mt-3 text-[10px] font-bold uppercase tracking-widest text-[#555]">Drag freely • Tap to Snap</p>
+      <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-[#555] sm:mt-3">Drag freely • Tap to Snap</p>
 
       {/* Dynamic Selected Action Details */}
-      <div className="relative z-0 mt-6 min-h-[80px] w-full px-4 pb-12 text-center">
+      <div className="relative z-0 mt-3 min-h-[80px] w-full px-4 pb-12 text-center sm:mt-6">
         <AnimatePresence mode="wait">
             <motion.div
               key={activeId}
@@ -1724,7 +1902,7 @@ function SphereCarousel({ userRole, energyPreference, onEnergyChange, selectedVi
 }
 
 // Binds native Framer DOM outputs avoiding lag and hiding non-view side/back items
-function SphereItem({ item, rotX, rotY, isActive, onClick }: any) {
+function SphereItem({ item, rotX, rotY, globeScale, isActive }: any) {
   const transformData = useTransform([rotX, rotY], ([rx, ry]: number[]) => {
     const p = rotate3D(item, rx, ry);
     const zVal = p.z;
@@ -1733,7 +1911,7 @@ function SphereItem({ item, rotX, rotY, isActive, onClick }: any) {
     const isVisible = zVal >= 60;
     const opacityVal = zVal < 60 ? 0 : zVal < 120 ? (zVal - 60) / 60 : 1;
     const perspectiveScale = 0.78 + 0.22 * ((Math.max(0, zVal) + RADIUS) / (2 * RADIUS));
-    const scaleVal = (isActive ? 1.15 : 1.0) * perspectiveScale;
+    const scaleVal = (isActive ? 1.15 : 1.0) * perspectiveScale * globeScale;
     
     const distXZ = Math.sqrt(p.x * p.x + p.z * p.z);
     const rotYDeg = Math.atan2(p.x, Math.max(1, p.z)) * (180 / Math.PI);
@@ -1741,8 +1919,8 @@ function SphereItem({ item, rotX, rotY, isActive, onClick }: any) {
     const zIndexVal = Math.round(zVal + RADIUS) + (isActive ? 1000 : 0);
 
     return {
-      x: p.x,
-      y: p.y,
+      x: p.x * globeScale,
+      y: p.y * globeScale,
       z: zVal,
       scale: scaleVal,
       opacity: opacityVal,
@@ -1776,7 +1954,6 @@ function SphereItem({ item, rotX, rotY, isActive, onClick }: any) {
         marginLeft: '-53px', marginTop: '-53px' 
       }}
       className={`absolute left-1/2 top-1/2 select-none ${item.isBlank ? 'pointer-events-none' : 'cursor-pointer'}`}
-      onClick={item.isBlank ? undefined : onClick}
     >
       <HiveButton title={item.title} icon={item.icon} featured={isActive} isBlank={item.isBlank} />
     </motion.div>

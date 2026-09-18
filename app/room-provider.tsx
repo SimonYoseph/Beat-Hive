@@ -6,20 +6,24 @@ import { createContext, ReactNode, useContext, useEffect, useRef, useState } fro
 import { supabase } from "../lib/supabase/client";
 
 export type RoomTrack = { videoId: string; title: string; channelTitle: string; thumbnail?: string; upvotes?: number };
-export type RoomState = { requests?: RoomTrack[]; queue?: RoomTrack[]; nowPlaying?: RoomTrack | null; isPlaying?: boolean; settings?: Record<string, unknown>; feedback?: Record<string, unknown> };
-export type SharedRoom = { code: string; name: string; host_name: string; version: number; state: RoomState; updated_at?: string };
+export type VibeReward = { participantId: string; participantName: string; score: number; fireUntil: string; lastAwardedAt: string };
+export type VibeShoutout = { participantName: string; expiresAt: string };
+export type RoomState = { requests?: RoomTrack[]; queue?: RoomTrack[]; nowPlaying?: RoomTrack | null; isPlaying?: boolean; settings?: Record<string, unknown>; feedback?: Record<string, unknown>; vibeRewards?: VibeReward[]; vibeShoutout?: VibeShoutout; awardedRequestIds?: string[] };
+export type RoomHost = { email: string };
+export type SharedRoom = { code: string; name: string; host_email?: string; host_name: string; hosts?: RoomHost[]; isHost?: boolean; wasAlreadyInSession?: boolean; version: number; state: RoomState; updated_at?: string };
 
 type RoomContextValue = {
   room: SharedRoom | null;
   configured: boolean;
   isLoading: boolean;
   refreshRoom: () => Promise<void>;
-  createRoom: (name: string) => Promise<SharedRoom>;
+  createRoom: (name: string, coHostEmails?: string[], starterQueue?: RoomTrack[]) => Promise<SharedRoom>;
   joinRoom: (code: string, displayName: string) => Promise<SharedRoom>;
   requestTrack: (track: RoomTrack) => Promise<void>;
   voteForTrack: (videoId: string) => Promise<void>;
   sendFeedback: (feedback: Record<string, unknown>) => Promise<void>;
   updateHostState: (update: (state: RoomState) => RoomState) => Promise<void>;
+  manageRoomHost: (email: string, role: "host" | "user") => Promise<void>;
 };
 
 const RoomContext = createContext<RoomContextValue | null>(null);
@@ -74,8 +78,8 @@ export function RoomProvider({ children }: { children: ReactNode }) {
     setIsLoading(false);
   };
 
-  const createRoom = async (name: string) => {
-    const response = await fetch("/api/rooms", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) });
+  const createRoom = async (name: string, coHostEmails: string[] = [], starterQueue: RoomTrack[] = []) => {
+    const response = await fetch("/api/rooms", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, coHostEmails, starterQueue }) });
     if (!response.ok) throw new Error(await readError(response));
     const data = await response.json() as { room: SharedRoom };
     setSharedRoom(data.room);
@@ -114,6 +118,14 @@ export function RoomProvider({ children }: { children: ReactNode }) {
     return request;
   };
 
+  const manageRoomHost = async (email: string, role: "host" | "user") => {
+    const currentRoom = room;
+    if (!currentRoom) throw new Error("Join a shared room first.");
+    const response = await fetch(`/api/rooms/${encodeURIComponent(currentRoom.code)}/actions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "manage-host", email, role }) });
+    if (!response.ok) throw new Error(await readError(response));
+    await refreshRoom();
+  };
+
   useEffect(() => {
     void refreshRoom().catch(() => setIsLoading(false));
   }, []);
@@ -128,7 +140,7 @@ export function RoomProvider({ children }: { children: ReactNode }) {
     return () => { void client.removeChannel(channel); };
   }, [room?.code]);
 
-  return <RoomContext.Provider value={{ room, configured: Boolean(supabase), isLoading, refreshRoom, createRoom, joinRoom, requestTrack: (track) => dispatchAction({ action: "request", track }), voteForTrack: (videoId) => dispatchAction({ action: "vote", videoId }), sendFeedback: (feedback) => dispatchAction({ action: "feedback", feedback }), updateHostState }}>{children}</RoomContext.Provider>;
+  return <RoomContext.Provider value={{ room, configured: Boolean(supabase), isLoading, refreshRoom, createRoom, joinRoom, requestTrack: (track) => dispatchAction({ action: "request", track }), voteForTrack: (videoId) => dispatchAction({ action: "vote", videoId }), sendFeedback: (feedback) => dispatchAction({ action: "feedback", feedback }), updateHostState, manageRoomHost }}>{children}</RoomContext.Provider>;
 }
 
 export function useRoom() {

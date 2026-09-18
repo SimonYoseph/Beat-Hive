@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import { motion } from "framer-motion";
-import { ArrowLeft, Globe2, List, Users } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import { ArrowLeft, Flame, Globe2, List, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+
+import { useRoom } from "../room-provider";
 
 type HiveMember = {
   name: string;
@@ -13,6 +15,7 @@ type HiveMember = {
   position: { left: string; top: string };
   drift: { x: number[]; y: number[]; rotate: number[] };
   duration: number;
+  vibeScore?: number;
 };
 
 type FloatingPosition = {
@@ -38,20 +41,26 @@ const PARTY_MEMBERS: HiveMember[] = PARTY_MEMBER_NAMES.map((name, index) => {
 
 function ProfileAvatar({ member, index, size }: { member: HiveMember; index: number; size: "sm" | "md" }) {
   const isYellow = index % 2 === 0;
-  const sizeClass = size === "sm" ? "h-10 w-10 text-sm" : "h-12 w-12 text-sm";
+  const sizeClass = size === "sm" ? "h-8 w-8 text-xs sm:h-10 sm:w-10 sm:text-sm" : "h-12 w-12 text-sm";
   const fallbackClass = isYellow ? "bg-yellow-500 text-[#1a1a1a]" : "bg-[#242424] text-yellow-400";
 
   return (
-    <div className={`flex shrink-0 items-center justify-center overflow-hidden rounded-full font-black ${sizeClass} ${member.image ? "bg-[#242424]" : fallbackClass}`}>
-      {member.image ? <img src={member.image} alt={`${member.name} profile`} className="h-full w-full object-cover" /> : member.initials}
+    <div className="relative shrink-0">
+      <div className={`relative flex items-center justify-center overflow-hidden rounded-full font-black ${sizeClass} ${member.vibeScore ? "ring-2 ring-orange-400 shadow-[0_0_12px_rgba(251,146,60,.8)]" : ""} ${member.image ? "bg-[#242424]" : fallbackClass}`}>
+        {member.image ? <img src={member.image} alt={`${member.name} profile`} className="h-full w-full object-cover" /> : member.initials}
+      </div>
+      {member.vibeScore && <motion.span aria-label={`${member.name} is bringing the vibes`} initial={{ scale: 0.9 }} animate={{ scale: [0.9, 1.08, 0.9] }} transition={{ duration: 1.4, repeat: Infinity }} className="absolute -bottom-1 -right-1 z-10 grid h-5 w-5 place-items-center rounded-full border-2 border-[#111] bg-orange-500 text-black shadow-[0_0_10px_rgba(251,146,60,.9)]"><Flame size={12} fill="currentColor" strokeWidth={2.5} /></motion.span>}
     </div>
   );
 }
 
 export default function HivePage() {
   const { data: session } = useSession();
+  const { room } = useRoom();
   const [view, setView] = useState<"globe" | "list">("globe");
   const [customIcon, setCustomIcon] = useState<string | null>(null);
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
+  const [seenShoutoutKeys, setSeenShoutoutKeys] = useState<string[]>([]);
   const bubbleRefs = useRef<Array<HTMLElement | null>>([]);
   const globeCanvasRef = useRef<HTMLDivElement>(null);
 
@@ -81,7 +90,46 @@ export default function HivePage() {
     void loadProfileImage();
   }, [session?.user?.email]);
 
+  useEffect(() => {
+    const interval = window.setInterval(() => setCurrentTime(Date.now()), 30_000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    try {
+      setSeenShoutoutKeys(JSON.parse(window.localStorage.getItem("bh_seenVibeShoutouts") || "[]") as string[]);
+    } catch {
+      setSeenShoutoutKeys([]);
+    }
+  }, []);
+
   const yourName = session?.user?.name || "You";
+  const activeRewards = (room?.state.vibeRewards || []).filter((reward) => new Date(reward.fireUntil).getTime() > currentTime);
+  const rewardByName = new Map(activeRewards.map((reward) => [reward.participantName, reward]));
+  const rewardedMembers = activeRewards.filter((reward) => reward.participantName !== yourName).map((reward, index) => ({
+    name: reward.participantName,
+    initials: reward.participantName.slice(0, 1).toUpperCase(),
+    position: { left: `${35 + (index % 2) * 18}%`, top: `${25 + Math.floor(index / 2) * 18}%` },
+    drift: PARTY_MEMBERS[index]?.drift || { x: [0, 4, 0], y: [0, -4, 0], rotate: [0, 2, 0] },
+    duration: PARTY_MEMBERS[index]?.duration || 20,
+    vibeScore: reward.score,
+  }));
+  const sessionShoutout = room?.state.vibeShoutout && new Date(room.state.vibeShoutout.expiresAt).getTime() > currentTime ? room.state.vibeShoutout : null;
+  const shoutoutKey = sessionShoutout ? `${room?.code}:${sessionShoutout.participantName}:${sessionShoutout.expiresAt}` : "";
+  const showSessionShoutout = Boolean(sessionShoutout && !seenShoutoutKeys.includes(shoutoutKey));
+
+  useEffect(() => {
+    if (!showSessionShoutout || !shoutoutKey) return;
+    const timeout = window.setTimeout(() => {
+      setSeenShoutoutKeys((keys) => {
+        const nextKeys = [...new Set([...keys, shoutoutKey])].slice(-50);
+        window.localStorage.setItem("bh_seenVibeShoutouts", JSON.stringify(nextKeys));
+        return nextKeys;
+      });
+    }, 6_000);
+    return () => window.clearTimeout(timeout);
+  }, [showSessionShoutout, shoutoutKey]);
+
   const members: HiveMember[] = [
     {
       name: yourName,
@@ -90,8 +138,10 @@ export default function HivePage() {
       position: { left: "50%", top: "4%" },
       drift: { x: [0, -14, 10, 0], y: [0, 14, -10, 0], rotate: [0, -2, 2, 0] },
       duration: 24,
+      vibeScore: rewardByName.get(yourName)?.score,
     },
-    ...PARTY_MEMBERS,
+    ...rewardedMembers,
+    ...PARTY_MEMBERS.filter((member) => !rewardByName.has(member.name)).slice(0, PARTY_MEMBERS.length - rewardedMembers.length),
   ];
 
   useEffect(() => {
@@ -117,6 +167,16 @@ export default function HivePage() {
         position.y += position.velocityY * scale;
       });
 
+      activeRewards.forEach((_, index) => {
+        const rewardedIndex = index + 1;
+        const position = positions[rewardedIndex];
+        if (!position) return;
+        position.x = 35 + (index % 2) * 18;
+        position.y = 25 + Math.floor(index / 2) * 18;
+        position.velocityX = 0;
+        position.velocityY = 0;
+      });
+
       for (let firstIndex = 0; firstIndex < positions.length; firstIndex += 1) {
         for (let secondIndex = firstIndex + 1; secondIndex < positions.length; secondIndex += 1) {
           const first = positions[firstIndex];
@@ -124,7 +184,7 @@ export default function HivePage() {
           const distanceX = second.x - first.x;
           const distanceY = second.y - first.y;
           const distance = Math.hypot(distanceX, distanceY) || 0.01;
-          const collisionDistance = 13;
+          const collisionDistance = (canvasBounds?.width || 0) < 640 ? 10 : 13;
           if (distance >= collisionDistance) continue;
 
           const normalX = distanceX / distance;
@@ -165,7 +225,7 @@ export default function HivePage() {
 
     animationFrame = window.requestAnimationFrame(updatePositions);
     return () => window.cancelAnimationFrame(animationFrame);
-  }, [view, members.length]);
+  }, [activeRewards.length, view, members.length]);
 
   return (
     <main className="min-h-[100dvh] overflow-hidden bg-[#111] px-4 py-5 text-white">
@@ -196,15 +256,18 @@ export default function HivePage() {
           </div>
 
           {view === "globe" ? (
-            <div className="mt-6 flex-1 overflow-auto rounded-2xl border border-white/10 bg-[#111]">
-              <div ref={globeCanvasRef} className="relative min-h-[700px] min-w-[720px] overflow-hidden bg-[#111]">
+            <div className="mt-6 flex-1 overflow-hidden rounded-2xl border border-white/10 bg-[#111]">
+              <AnimatePresence>
+                {showSessionShoutout && sessionShoutout && <motion.div initial={{ opacity: 0, y: -12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -32, scale: 0.96 }} transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }} className="sticky top-0 z-10 flex items-center justify-center gap-2 bg-orange-500 px-4 py-3 text-center text-sm font-black text-black shadow-lg"><Flame size={18} fill="currentColor" />{sessionShoutout.participantName} earned the Vibe Bringer badge</motion.div>}
+              </AnimatePresence>
+              <div ref={globeCanvasRef} className="relative min-h-[440px] w-full overflow-hidden bg-[#111] sm:min-h-[700px]">
                 <img src="/images/vessel2-background.jpg" alt="" aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full origin-top scale-[1.18] object-cover object-center opacity-30 mix-blend-screen [filter:grayscale(1)_contrast(2.8)_invert(1)_sepia(.5)_saturate(5)_hue-rotate(8deg)_blur(.45px)]" />
                 <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(250,204,21,0.05),rgba(17,17,17,0.86)_82%)]" />
                 {members.map((member, index) => (
-                  <article key={member.name} ref={(element) => { bubbleRefs.current[index] = element; }} className="absolute will-change-transform" style={{ left: 0, top: 0 }}>
-                    <div className="flex min-w-24 items-center gap-2 rounded-full border border-white/20 bg-white/10 py-2 pl-2 pr-3 shadow-lg backdrop-blur-xl">
+                  <article key={member.name} ref={(element) => { bubbleRefs.current[index] = element; }} aria-label={member.name} className="absolute will-change-transform" style={{ left: 0, top: 0 }}>
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-white/10 shadow-lg backdrop-blur-xl sm:h-auto sm:w-auto sm:min-w-24 sm:justify-start sm:gap-2 sm:py-2 sm:pl-2 sm:pr-3">
                       <ProfileAvatar member={member} index={index} size="sm" />
-                      <span className="max-w-20 truncate text-sm font-bold">{member.name}</span>
+                      <span className="hidden max-w-20 truncate text-sm font-bold sm:block">{member.name}</span>
                     </div>
                   </article>
                 ))}

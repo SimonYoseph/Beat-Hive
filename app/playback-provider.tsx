@@ -59,14 +59,15 @@ function recordPlayedTrack(track: NowPlayingTrack) {
 
 export function PlaybackProvider({ children }: { children: ReactNode }) {
   const { data: session } = useSession();
-  const { room, refreshRoom, updateHostState } = useRoom();
+  const { room, refreshRoom, updateHostState, manageRoomHost } = useRoom();
   const [nowPlaying, updateNowPlaying] = useState<NowPlayingTrack | null>(null);
   const [isPlaying, updateIsPlaying] = useState(false);
   const [isMuted, updateIsMuted] = useState(false);
   const [isVideoHidden, setIsVideoHidden] = useState(false);
   const [volume, setVolume] = useState(1);
   const [isMasterControlEnabled, setIsMasterControlEnabled] = useState(true);
-  const [isHiveHost, setIsHiveHost] = useState(false);
+  const [roleEmail, setRoleEmail] = useState("");
+  const [roleMessage, setRoleMessage] = useState("");
   const [isMasterPanelOpen, setIsMasterPanelOpen] = useState(false);
   const [isTutorialOpen, setIsTutorialOpen] = useState(false);
   const [masterControlPosition, setMasterControlPosition] = useState({ x: 16, y: 16 });
@@ -78,7 +79,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const masterResizeRef = useRef<{ startX: number; startY: number; width: number; height: number } | null>(null);
   const masterControlSizeRef = useRef(masterControlSize);
   const masterControlPositionRef = useRef(masterControlPosition);
-  const isMasterAccount = session?.user?.email?.toLowerCase() === MASTER_CONTROL_EMAIL;
+  const accountEmail = session?.user?.email?.toLowerCase();
+  const isMasterAccount = accountEmail === MASTER_CONTROL_EMAIL;
+  const isHiveHost = Boolean(accountEmail && room && (room.host_email?.toLowerCase() === accountEmail || room.hosts?.some((host) => host.email.toLowerCase() === accountEmail)));
   const canControlSession = isMasterAccount || isHiveHost;
   const isSessionControlEnabled = isMasterAccount ? isMasterControlEnabled : isHiveHost;
   const sessionControlLabel = isMasterAccount ? "OMNI CONTROL" : "HIVE SESSION";
@@ -297,23 +300,6 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   }, [room]);
 
   useEffect(() => {
-    const syncHostSession = () => {
-      try {
-        setIsHiveHost(window.localStorage.getItem("bh_userRole") === '"dj"' && window.localStorage.getItem("bh_djRoomActive") === "true");
-      } catch {
-        setIsHiveHost(false);
-      }
-    };
-    syncHostSession();
-    window.addEventListener("storage", syncHostSession);
-    window.addEventListener("bh-host-session-change", syncHostSession);
-    return () => {
-      window.removeEventListener("storage", syncHostSession);
-      window.removeEventListener("bh-host-session-change", syncHostSession);
-    };
-  }, []);
-
-  useEffect(() => {
     const keepControlInViewport = () => {
       const controlWidth = getCollapsedControlWidth();
       const nextPosition = {
@@ -413,6 +399,11 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
           {isMasterAccount && <button onClick={toggleMasterControl} role="switch" aria-checked={isMasterControlEnabled} title={isMasterControlEnabled ? "Switch to Hive User control" : "Switch to Omni Control"} className={`flex h-9 w-full items-center justify-between rounded px-3 text-xs font-bold transition-colors ${isMasterControlEnabled ? "bg-yellow-400 text-[#17130b]" : "bg-white/10 text-white"}`}>
             <span>Hive User Mode</span><span className={`h-3 w-3 rounded-full ${isMasterControlEnabled ? "bg-black" : "bg-gray-500"}`} />
           </button>}
+          {isMasterAccount && room && <div className="mt-3 rounded-md border border-yellow-400/20 bg-black/30 p-2">
+            <p className="text-xs font-bold text-yellow-100">Room roles</p>
+            <div className="mt-2 flex gap-2"><input aria-label="Account email" value={roleEmail} onChange={(event) => setRoleEmail(event.target.value)} placeholder="account@email.com" className="min-w-0 flex-1 rounded bg-black/40 px-2 py-1 text-xs text-white" /><button onClick={() => void manageRoomHost(roleEmail, "host").then(() => { setRoleMessage("Host added"); setRoleEmail(""); }).catch((error: unknown) => setRoleMessage(error instanceof Error ? error.message : "Could not update role."))} className="rounded bg-yellow-400 px-2 text-xs font-bold text-black">Make host</button><button onClick={() => void manageRoomHost(roleEmail, "user").then(() => { setRoleMessage("Host removed"); setRoleEmail(""); }).catch((error: unknown) => setRoleMessage(error instanceof Error ? error.message : "Could not update role."))} className="rounded bg-white/10 px-2 text-xs font-bold text-white">Make user</button></div>
+            {roleMessage && <p className="mt-2 text-xs text-yellow-100" role="status">{roleMessage}</p>}
+          </div>}
           {isSessionControlEnabled && <>
             <div className="mt-3 rounded-md border border-yellow-400/20 bg-black/30 p-2">
               <div className="grid grid-cols-3 gap-2">
