@@ -266,7 +266,7 @@ function PartyHistorySection({ history, isLoading }: { history: PartyHistory | n
 
 // Main Entry Component
 export default function BeatHiveApp() {
-  const { data: session } = useSession();
+  const { data: session, status: sessionStatus } = useSession();
   const authProvider = (session as (typeof session & { provider?: string }) | null)?.provider;
   const { nowPlaying, isPlaying, setNowPlaying, setIsPlaying } = usePlayback();
   const { room: sharedRoom, createRoom } = useRoom();
@@ -275,6 +275,7 @@ export default function BeatHiveApp() {
       // Removed unused YouTube search state variables
   const [isClient, setIsClient] = useState(false);
   const isFindingVibeTrack = useRef(false);
+  const [isRoleChoiceOpen, setIsRoleChoiceOpen] = useState(false);
 
   // Always force scroll to top on exact mounting of the main component
   useEffect(() => {
@@ -282,7 +283,7 @@ export default function BeatHiveApp() {
     window.scrollTo(0, 0);
   }, []);
 
-  const [isAuthenticated, setIsAuthenticated] = usePersistedState('bh_isAuthenticated', false);
+  const [, setIsAuthenticated] = usePersistedState('bh_isAuthenticated', false);
 
   useEffect(() => {
     if (session) {
@@ -468,11 +469,6 @@ export default function BeatHiveApp() {
 
   if (!isClient) return null; // Prevent hydration flash on first render
 
-  const handleSignIn = () => {
-    setIsAuthenticated(true);
-    window.scrollTo(0, 0);
-  };
-
   const returnToSignIn = () => {
     window.localStorage.removeItem('bh_isAuthenticated');
     window.localStorage.removeItem('bh_userRole');
@@ -488,6 +484,7 @@ export default function BeatHiveApp() {
       returnToSignIn();
       return;
     }
+    setIsRoleChoiceOpen(false);
     setHostSetupRequested(role === 'dj');
     setUserRole(role);
     window.scrollTo(0, 0);
@@ -769,7 +766,7 @@ export default function BeatHiveApp() {
   };
 
   // State 1: User needs to Sign In / Create Account
-  const isUserLoggedIn = isAuthenticated || Boolean(session);
+  const isUserLoggedIn = Boolean(session);
   const hostProfileSettings = showSettings && (
     <AnimatePresence>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[10002] flex items-end bg-black/80 p-4 sm:items-center sm:justify-center" role="dialog" aria-modal="true" aria-labelledby="host-profile-title">
@@ -803,6 +800,8 @@ export default function BeatHiveApp() {
       </motion.div>
     </AnimatePresence>
   );
+  if (sessionStatus === 'loading') return null;
+
   if (!isUserLoggedIn) {
     return (
       <main className="min-h-[100dvh] flex flex-col items-center justify-center p-6 text-center bg-[#111] overflow-hidden relative">
@@ -838,19 +837,6 @@ export default function BeatHiveApp() {
               Continue with Google
             </button>
 
-            <div className="relative flex items-center py-2">
-              <div className="flex-grow border-t border-[#333]"></div>
-              <span className="flex-shrink-0 mx-4 text-[#666] text-sm font-semibold uppercase tracking-wider">or</span>
-              <div className="flex-grow border-t border-[#333]"></div>
-            </div>
-
-            <button
-              onClick={handleSignIn}
-              className="w-full py-4 px-6 bg-[#1a1a1a] hover:bg-[#222] border border-[#333] text-white font-bold text-lg rounded-xl flex items-center justify-center gap-3 transition-transform active:scale-95"
-            >
-              <Mail size={22} className="text-gray-400" />
-              Sign up with Email
-            </button>
           </div>
           
           <p className="mt-8 text-xs text-gray-500 max-w-[280px] mx-auto leading-relaxed">
@@ -862,15 +848,12 @@ export default function BeatHiveApp() {
   }
 
   // State 2: Select Role (DJ vs Guest)
-  if (userRole === 'none' || (userRole === 'dj' && !djRoomActive && !hostSetupRequested)) {
+  if (isRoleChoiceOpen) {
     return (
       <main className="min-h-[100dvh] flex flex-col items-center justify-center p-6 text-center bg-[#111] relative">
         <button
           onClick={async () => {
-            setIsAuthenticated(false);
-            if (session) {
-              await signOut({ redirect: false });
-            }
+            setIsRoleChoiceOpen(false);
             window.scrollTo(0, 0);
           }}
           className="absolute top-6 left-6 p-2 rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors flex items-center gap-2"
@@ -1256,6 +1239,16 @@ export default function BeatHiveApp() {
             </h1>
             <p className="text-xs text-yellow-500/80 uppercase tracking-widest font-bold">Live Queue Control</p>
           </header>
+          {isMasterAccount && <button
+            type="button"
+            onClick={() => { setIsRoleChoiceOpen(true); setHasAccess(false); setDjPreviewingGuest(false); window.scrollTo(0, 0); }}
+            title="Choose host or join mode"
+            aria-label="Open Omni Control"
+            className="absolute right-2 flex h-10 items-center gap-2 rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-3 text-xs font-bold text-yellow-500 transition-colors hover:bg-yellow-500 hover:text-black sm:right-8"
+          >
+            <ShieldAlert size={17} />
+            <span>Omni Control</span>
+          </button>}
         </div>
 
         {userRole === 'guest' && joinedRoom && <div className="mb-4 flex items-center justify-center gap-2 rounded-lg border border-yellow-500/20 bg-yellow-500/5 px-3 py-2 text-center text-xs text-yellow-100"><span className="h-2 w-2 shrink-0 rounded-full bg-yellow-500" />Connected to {joinedRoom.hostName}&apos;s room: {joinedRoom.roomName}</div>}

@@ -26,6 +26,7 @@ type FloatingPosition = {
 };
 
 const PARTY_MEMBER_NAMES = ["Maya", "Theo", "Zuri", "Jordan", "Sam", "Nia", "Avery", "Kai", "Leah", "Miles", "Amara", "Dante", "Sasha", "Micah", "Ivy", "Noah", "Renee", "Omar", "Talia", "Ezra", "Jade", "Caleb", "Priya", "Leo", "Anika", "Mason", "Skye", "Isaiah", "Mila", "Cameron", "Amina", "Jules", "Elijah", "Sienna", "Malik", "Remy"];
+const SHOWCASE_ACCOUNT_EMAIL = "simon97862012@gmail.com";
 
 const PARTY_MEMBERS: HiveMember[] = PARTY_MEMBER_NAMES.map((name, index) => {
   const angle = index * 137.508 * (Math.PI / 180);
@@ -104,6 +105,7 @@ export default function HivePage() {
   }, []);
 
   const yourName = session?.user?.name || "You";
+  const showShowcaseMembers = session?.user?.email?.toLowerCase() === SHOWCASE_ACCOUNT_EMAIL;
   const activeRewards = (room?.state.vibeRewards || []).filter((reward) => new Date(reward.fireUntil).getTime() > currentTime);
   const rewardByName = new Map(activeRewards.map((reward) => [reward.participantName, reward]));
   const rewardedMembers = activeRewards.filter((reward) => reward.participantName !== yourName).map((reward, index) => ({
@@ -141,7 +143,7 @@ export default function HivePage() {
       vibeScore: rewardByName.get(yourName)?.score,
     },
     ...rewardedMembers,
-    ...PARTY_MEMBERS.filter((member) => !rewardByName.has(member.name)).slice(0, PARTY_MEMBERS.length - rewardedMembers.length),
+    ...(showShowcaseMembers ? PARTY_MEMBERS.filter((member) => !rewardByName.has(member.name)).slice(0, PARTY_MEMBERS.length - rewardedMembers.length) : []),
   ];
 
   useEffect(() => {
