@@ -1335,7 +1335,8 @@ export default function BeatHiveApp() {
               <List size={16} /> List
             </button>
           </div>
-          <NextLink data-tutorial-target="guest-queue-link" href="/youtube" title="View your queue" aria-label="View your queue" className="flex h-12 w-12 items-center justify-center rounded-xl border border-yellow-500/30 bg-yellow-500/10 text-yellow-500 transition-colors hover:bg-yellow-500 hover:text-black">
+          <NextLink data-tutorial-target="guest-queue-link" href="/youtube" title="Request music" aria-label="Request music" className="flex h-12 shrink-0 items-center justify-center gap-2 rounded-xl border border-yellow-500/30 bg-yellow-500/10 px-3 text-sm font-bold text-yellow-500 transition-colors hover:bg-yellow-500 hover:text-black">
+            <span>Request Music</span>
             <ListMusic size={20} />
           </NextLink>
         </div>
