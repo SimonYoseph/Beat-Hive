@@ -90,7 +90,6 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   }
 
   function startPlayback() {
-    updateIsMuted(true);
     updateIsPlaying(true);
     persistHostState((state) => ({ ...state, isPlaying: true }));
   }
