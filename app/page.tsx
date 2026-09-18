@@ -6,6 +6,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import NextLink from 'next/link';
 import { QRCodeSVG } from "qrcode.react";
+import { Scanner } from "@yudiel/react-qr-scanner";
 import { 
   Music, 
   ThumbsUp, 
@@ -353,6 +354,8 @@ export default function BeatHiveApp() {
   const [viewedRequestIds, setViewedRequestIds] = usePersistedState<string[]>('bh_viewedRequestIds', []);
   // Guest State
   const [qrExpanded, setQrExpanded] = usePersistedState('bh_qrExpanded', false);
+  const [isQrScanning, setIsQrScanning] = useState(false);
+  const [qrScanError, setQrScanError] = useState('');
   const [remoteSettingsLoaded, setRemoteSettingsLoaded] = useState(false);
 
   useEffect(() => {
@@ -539,6 +542,21 @@ export default function BeatHiveApp() {
   const handleScanAccess = () => {
     setHasAccess(true);
     window.scrollTo(0, 0);
+  };
+
+  const handleQrScan = (detectedCodes: Array<{ rawValue: string }>) => {
+    const scannedValue = detectedCodes[0]?.rawValue;
+    if (!scannedValue) return;
+
+    try {
+      const scannedUrl = new URL(scannedValue);
+      const room = scannedUrl.searchParams.get('room');
+      if (!room) throw new Error();
+      setIsQrScanning(false);
+      window.location.assign(`/join?${new URLSearchParams({ room }).toString()}`);
+    } catch {
+      setQrScanError('This is not a valid Beat Hive room code.');
+    }
   };
 
   const replayTutorial = (role: 'host' | 'guest', phase: 'setup' | 'session' = 'setup') => {
@@ -1128,7 +1146,7 @@ export default function BeatHiveApp() {
                   animate={{ opacity: 1, height: "auto", y: 0 }}
                   exit={{ opacity: 0, height: 0, y: -10 }}
                   transition={{ duration: 0.3, ease: [0.04, 0.62, 0.23, 0.98] }}
-                  onClick={() => setQrExpanded(true)}
+                  onClick={() => { setQrExpanded(true); setIsQrScanning(true); setQrScanError(''); }}
                   className="w-full py-4 px-6 bg-yellow-500 mb-4 hover:bg-yellow-400 text-black font-bold text-xl rounded-xl flex items-center justify-center gap-3 active:scale-95 shadow-lg shadow-yellow-500/20 origin-top"
                 >
                   <QrCode size={24} />
@@ -1143,15 +1161,11 @@ export default function BeatHiveApp() {
                   transition={{ duration: 0.3, ease: [0.04, 0.62, 0.23, 0.98] }}
                   className="w-full flex flex-col gap-4 overflow-hidden origin-top mb-4"
                 >
+                  {isQrScanning && <div className="overflow-hidden rounded-xl border border-yellow-500/40 bg-black"><Scanner onScan={handleQrScan} onError={() => setQrScanError('Camera access is unavailable. Enter the room link instead.')} constraints={{ facingMode: 'environment' }} formats={['qr_code']} sound={false} classNames={{ container: 'w-full', video: 'w-full' }} /></div>}
+                  {qrScanError && <p className="text-sm text-red-400" role="alert">{qrScanError}</p>}
+                  <NextLink href="/join" className="w-full py-4 px-6 bg-[#1a1a1a] hover:bg-[#222] border border-[#333] text-white font-bold text-lg rounded-xl flex items-center justify-center gap-3 transition-transform active:scale-95"><Link size={22} className="text-gray-400" />Enter Room Link</NextLink>
                   <button
-                    onClick={handleScanAccess}
-                    className="w-full py-4 px-6 bg-yellow-500 hover:bg-yellow-400 text-black font-bold text-xl rounded-xl flex items-center justify-center gap-3 transition-all active:scale-95 shadow-lg shadow-yellow-500/20"
-                  >
-                    Simulate Scan
-                    <ArrowRight size={24} />
-                  </button>
-                  <button
-                    onClick={() => setQrExpanded(false)}
+                    onClick={() => { setIsQrScanning(false); setQrExpanded(false); }}
                     className="w-full py-2 px-6 bg-transparent text-gray-400 font-bold text-sm rounded-xl flex items-center justify-center gap-2 transition-all hover:text-white"
                   >
                     Cancel
