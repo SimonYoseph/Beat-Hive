@@ -103,12 +103,13 @@ function QueueTrackItem({ track, index, isPlaying, canReorder, canRemove, canCon
   );
 }
 
-function RequestTrackItem({ track, onRemove }: { track: RequestedTrack; onRemove: (videoId: string) => void }) {
+function RequestTrackItem({ track, canAddToHiveQueue, pendingAction, onAddToHiveQueue, onRemove }: { track: RequestedTrack; canAddToHiveQueue: boolean; pendingAction: boolean; onAddToHiveQueue: (track: RequestedTrack) => void; onRemove: (videoId: string) => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: `request-${track.videoId}` });
 
   return (
     <article ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition: isDragging ? undefined : transition }} className={`flex min-w-0 items-center gap-2 rounded-lg bg-[#1b1b1b] p-2 will-change-transform sm:p-3 ${isDragging ? "opacity-40" : ""}`}>
       <div className="min-w-0 flex-1"><h4 className="truncate text-sm font-bold sm:text-base">{track.title}</h4><p className="truncate text-xs text-gray-400 sm:text-sm">{track.channelTitle}</p></div>
+      {canAddToHiveQueue && <button onClick={() => onAddToHiveQueue(track)} disabled={pendingAction} className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-emerald-500/20 text-emerald-300 hover:bg-emerald-400 hover:text-black disabled:cursor-wait disabled:opacity-50 sm:h-8 sm:w-8" aria-label={`Add ${track.title} to Hive Queue`} title="Add to Hive Queue"><Plus size={17} /></button>}
       <button type="button" className="flex h-7 w-7 touch-none cursor-grab items-center justify-center rounded bg-white/5 text-gray-300 hover:bg-yellow-500 hover:text-black active:cursor-grabbing sm:h-8 sm:w-8" aria-label={`Drag ${track.title} to reorder`} title="Drag to reorder" {...attributes} {...listeners}><Menu size={16} /></button>
       <button onClick={() => onRemove(track.videoId)} className="flex h-7 w-7 items-center justify-center rounded bg-white/5 text-gray-400 hover:bg-red-500 hover:text-white sm:h-8 sm:w-8" aria-label={`Remove ${track.title} from requests`} title="Remove request"><Trash2 size={13} /></button>
     </article>
@@ -156,7 +157,7 @@ export default function YoutubePage() {
   const [masterSettings, setMasterSettings] = useState<MasterSettings>(DEFAULT_MASTER_SETTINGS);
   const isMasterAccount = session?.user?.email?.toLowerCase() === MASTER_CONTROL_EMAIL && isMasterControlEnabled;
   const canManageQueue = isMasterAccount || isHost;
-  const canPromoteRequests = isMasterAccount && (!room || isHost);
+  const canPromoteRequests = isMasterAccount;
   const searchFormRef = useRef<HTMLFormElement>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -401,6 +402,31 @@ export default function YoutubePage() {
     const nextRequests = requestTracks.filter((track) => track.videoId !== videoId);
     setRequestTracks(nextRequests);
     window.localStorage.setItem("bh_youtube_requests", JSON.stringify(nextRequests));
+  }
+
+  function moveRequestToHiveQueue(track: RequestedTrack) {
+    if (!canPromoteRequests) return;
+
+    if (room) {
+      void runTrackAction(track.videoId, () => updateHostState((state) => {
+        const requests = state.requests || [];
+        const request = requests.find((candidate) => candidate.videoId === track.videoId);
+        if (!request) return state;
+        const queue = state.queue || [];
+        if (queue.some((queuedTrack) => queuedTrack.videoId === request.videoId)) return state;
+        return { ...state, requests: requests.filter((candidate) => candidate.videoId !== request.videoId), queue: [...queue, request] };
+      })).catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Could not add the request to the Hive Queue."));
+      return;
+    }
+
+    if (playQueue.some((queuedTrack) => queuedTrack.videoId === track.videoId)) return;
+    const nextRequests = requestTracks.filter((request) => request.videoId !== track.videoId);
+    const nextPlayQueue = [...playQueue, track];
+    setRequestTracks(nextRequests);
+    setPlayQueue(nextPlayQueue);
+    window.localStorage.setItem("bh_youtube_requests", JSON.stringify(nextRequests));
+    window.localStorage.setItem("bh_play_queue", JSON.stringify(nextPlayQueue));
+    window.dispatchEvent(new Event("bh-playback-change"));
   }
 
   function addPlayedTrackToHiveQueue(track: QueuedTrack) {
@@ -711,7 +737,7 @@ export default function YoutubePage() {
             <DndContext sensors={sensors} onDragStart={handleQueueDragStart} onDragCancel={() => setActiveDragId(null)} onDragEnd={(event) => { setActiveDragId(null); handleQueueDragEnd(event); }}><div className="grid gap-6 md:grid-cols-2">
               <section className="min-w-0">
                 <div className="relative mb-2 text-center"><h3 className="font-bold">Your Queue</h3><span className="absolute right-0 top-0 text-sm text-gray-500">{requestTracks.length}</span></div>
-                <PersonalQueueDropZone>{requestTracks.length === 0 ? <p className="p-3 text-sm text-gray-500">Songs you request will appear here.</p> : <SortableContext items={requestTracks.map((track) => `request-${track.videoId}`)} strategy={verticalListSortingStrategy}><div className="space-y-2">{requestTracks.map((track) => <RequestTrackItem key={track.videoId} track={track} onRemove={removeRequest} />)}</div></SortableContext>}</PersonalQueueDropZone>
+                <PersonalQueueDropZone>{requestTracks.length === 0 ? <p className="p-3 text-sm text-gray-500">Songs you request will appear here.</p> : <SortableContext items={requestTracks.map((track) => `request-${track.videoId}`)} strategy={verticalListSortingStrategy}><div className="space-y-2">{requestTracks.map((track) => <RequestTrackItem key={track.videoId} track={track} canAddToHiveQueue={canPromoteRequests && !playQueue.some((queuedTrack) => queuedTrack.videoId === track.videoId)} pendingAction={pendingTrackActionId !== null} onAddToHiveQueue={moveRequestToHiveQueue} onRemove={removeRequest} />)}</div></SortableContext>}</PersonalQueueDropZone>
               </section>
               <section className="min-w-0">
                 <div className="relative mb-2 text-center"><h3 className="font-bold">Hive Queue</h3><span className="absolute right-0 top-0 text-sm text-gray-500">{playQueue.length}</span></div>
