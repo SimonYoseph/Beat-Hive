@@ -403,6 +403,26 @@ export default function YoutubePage() {
     window.localStorage.setItem("bh_youtube_requests", JSON.stringify(nextRequests));
   }
 
+  function addPlayedTrackToHiveQueue(track: QueuedTrack) {
+    if (!isMasterAccount) return;
+    const hiveTrack: RequestedTrack = { ...track, upvotes: 0 };
+
+    if (room) {
+      void runTrackAction(track.videoId, () => updateHostState((state) => {
+        const queue = state.queue || [];
+        if (queue.some((queuedTrack) => queuedTrack.videoId === track.videoId)) return state;
+        return { ...state, queue: [...queue, hiveTrack] };
+      })).catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Could not add the played track to the Hive Queue."));
+      return;
+    }
+
+    if (playQueue.some((queuedTrack) => queuedTrack.videoId === track.videoId)) return;
+    const nextPlayQueue = [...playQueue, hiveTrack];
+    setPlayQueue(nextPlayQueue);
+    window.localStorage.setItem("bh_play_queue", JSON.stringify(nextPlayQueue));
+    window.dispatchEvent(new Event("bh-playback-change"));
+  }
+
   function handleQueueDragEnd(event: DragEndEvent) {
     if (!isMasterAccount && masterSettings.queueLocked) {
       setMessage("Hive Queue edits are locked by Omni Control.");
@@ -703,7 +723,7 @@ export default function YoutubePage() {
 
         <section className="mt-6">
           <div className="mb-2 flex items-center justify-center gap-2"><History className="text-yellow-500" size={18} /><h2 className="font-bold">Played history</h2><span className="text-sm text-gray-500">{playedTracks.length}</span><button onClick={() => setIsHistoryCollapsed((isCollapsed) => !isCollapsed)} className="flex h-8 w-8 items-center justify-center rounded bg-white/5 text-gray-300 hover:bg-yellow-500 hover:text-black" aria-label={isHistoryCollapsed ? "Expand played history" : "Minimize played history"} title={isHistoryCollapsed ? "Expand played history" : "Minimize played history"}>{isHistoryCollapsed ? <ChevronDown size={18} /> : <ChevronUp size={18} />}</button></div>
-          {!isHistoryCollapsed && <><div className="space-y-2">{[...playedTracks].reverse().slice(0, 10).map((track, index) => <article key={`${track.videoId}-${index}`} className="flex items-center gap-3 rounded-lg bg-[#1b1b1b] p-3"><span className="w-5 text-center text-sm font-bold text-gray-500">{playedTracks.length - index}</span><div className="min-w-0 flex-1"><h3 className="truncate font-bold">{track.title}</h3><p className="truncate text-sm text-gray-400">{track.channelTitle}</p></div></article>)}</div><p className="mt-3 text-center text-sm text-gray-500">Played songs from Hive Queue will appear here.</p></>}
+          {!isHistoryCollapsed && <><div className="space-y-2">{[...playedTracks].reverse().slice(0, 10).map((track, index) => <article key={`${track.videoId}-${index}`} className="flex items-center gap-3 rounded-lg bg-[#1b1b1b] p-3"><span className="w-5 text-center text-sm font-bold text-gray-500">{playedTracks.length - index}</span><div className="min-w-0 flex-1"><h3 className="truncate font-bold">{track.title}</h3><p className="truncate text-sm text-gray-400">{track.channelTitle}</p></div>{isMasterAccount && <button onClick={() => addPlayedTrackToHiveQueue(track)} disabled={pendingTrackActionId !== null || playQueue.some((queuedTrack) => queuedTrack.videoId === track.videoId)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/20 text-emerald-300 hover:bg-emerald-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-40" aria-label={`Add ${track.title} back to Hive Queue`} title="Add back to Hive Queue"><Plus size={18} /></button>}</article>)}</div><p className="mt-3 text-center text-sm text-gray-500">Played songs from Hive Queue will appear here.</p></>}
         </section>
 
         <div className="mt-6 space-y-2">

@@ -36,6 +36,7 @@ type MasterSettings = {
 };
 
 const DEFAULT_MASTER_SETTINGS: MasterSettings = { requestsPaused: false, queueLocked: false, maxRequests: 20, preventDuplicates: true, voteThreshold: 0 };
+const PLAYER_MIN_TOP = 180;
 
 function formatPlaybackTime(seconds: number) {
   if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
@@ -87,6 +88,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const [isTutorialOpen, setIsTutorialOpen] = useState(false);
   const [masterControlPosition, setMasterControlPosition] = useState({ x: 16, y: 16 });
   const [masterControlSize, setMasterControlSize] = useState({ width: 440, height: 0 });
+  const [playerPosition, setPlayerPosition] = useState({ x: 16, y: PLAYER_MIN_TOP });
   const [masterSettings, setMasterSettings] = useState<MasterSettings>(DEFAULT_MASTER_SETTINGS);
   const playerRef = useRef<HTMLVideoElement>(null);
   const transitionGainRef = useRef(1);
@@ -98,6 +100,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const masterResizeRef = useRef<{ startX: number; startY: number; width: number; height: number } | null>(null);
   const masterControlSizeRef = useRef(masterControlSize);
   const masterControlPositionRef = useRef(masterControlPosition);
+  const playerPositionRef = useRef(playerPosition);
+  const playerDragRef = useRef<{ startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(null);
+  const playerDragCompletedRef = useRef(false);
   const accountEmail = session?.user?.email?.toLowerCase();
   const isMasterAccount = accountEmail === MASTER_CONTROL_EMAIL;
   const isHiveHost = Boolean(accountEmail && room && (room.host_email?.toLowerCase() === accountEmail || room.hosts?.some((host) => host.email.toLowerCase() === accountEmail)));
@@ -374,6 +379,42 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     masterResizeRef.current = null;
   }
 
+  function getPlayerDimensions() {
+    const compactPlayer = window.innerWidth < 640;
+    return { width: compactPlayer ? Math.min(160, window.innerWidth - 32) : 320, height: compactPlayer ? 90 : 180, controlHeight: compactPlayer ? 40 : 48 };
+  }
+
+  function constrainPlayerPosition(position: { x: number; y: number }) {
+    const { width, height, controlHeight } = getPlayerDimensions();
+    return {
+      x: Math.max(16, Math.min(position.x, window.innerWidth - width - 16)),
+      y: Math.max(PLAYER_MIN_TOP, Math.min(position.y, Math.max(PLAYER_MIN_TOP, window.innerHeight - height - controlHeight - 16))),
+    };
+  }
+
+  function handlePlayerPointerDown(event: ReactPointerEvent<HTMLButtonElement>) {
+    event.currentTarget.setPointerCapture(event.pointerId);
+    playerDragRef.current = { startX: event.clientX, startY: event.clientY, originX: playerPosition.x, originY: playerPosition.y, moved: false };
+  }
+
+  function handlePlayerPointerMove(event: ReactPointerEvent<HTMLButtonElement>) {
+    const drag = playerDragRef.current;
+    if (!drag) return;
+    const distanceX = event.clientX - drag.startX;
+    const distanceY = event.clientY - drag.startY;
+    if (Math.hypot(distanceX, distanceY) > 5) drag.moved = true;
+    if (!drag.moved) return;
+    const nextPosition = constrainPlayerPosition({ x: drag.originX + distanceX, y: drag.originY + distanceY });
+    playerPositionRef.current = nextPosition;
+    setPlayerPosition(nextPosition);
+  }
+
+  function handlePlayerPointerUp() {
+    playerDragCompletedRef.current = Boolean(playerDragRef.current?.moved);
+    if (playerDragCompletedRef.current) window.localStorage.setItem("bh_videoPlayerPosition", JSON.stringify(playerPositionRef.current));
+    playerDragRef.current = null;
+  }
+
   useEffect(() => {
     refreshPlayback();
     const handlePlaybackChange = () => refreshPlayback();
@@ -442,6 +483,29 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     window.addEventListener("resize", keepControlInViewport);
     return () => window.removeEventListener("resize", keepControlInViewport);
   }, [isMasterPanelOpen, masterControlSize.width]);
+
+  useEffect(() => {
+    try {
+      const savedPosition = JSON.parse(window.localStorage.getItem("bh_videoPlayerPosition") || "null") as { x?: number; y?: number } | null;
+      const defaultPosition = { x: window.innerWidth - getPlayerDimensions().width - 16, y: window.innerHeight - getPlayerDimensions().height - getPlayerDimensions().controlHeight - 16 };
+      const storedPosition = typeof savedPosition?.x === "number" && typeof savedPosition.y === "number" ? { x: savedPosition.x, y: savedPosition.y } : defaultPosition;
+      const restoredPosition = constrainPlayerPosition(storedPosition);
+      playerPositionRef.current = restoredPosition;
+      setPlayerPosition(restoredPosition);
+    } catch {
+      // Keep the default player position when the saved value cannot be read.
+    }
+  }, []);
+
+  useEffect(() => {
+    const keepPlayerInViewport = () => {
+      const nextPosition = constrainPlayerPosition(playerPositionRef.current);
+      playerPositionRef.current = nextPosition;
+      setPlayerPosition(nextPosition);
+    };
+    window.addEventListener("resize", keepPlayerInViewport);
+    return () => window.removeEventListener("resize", keepPlayerInViewport);
+  }, []);
 
   const sessionActivity = (() => {
     try {
@@ -520,13 +584,12 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       {children}
       {canControlSession && !isTutorialOpen && <div className="fixed z-50" style={{ left: isMasterPanelOpen ? Math.max(0, Math.min(masterControlPosition.x, window.innerWidth - Math.min(masterControlSize.width, window.innerWidth - 32) - 16)) : masterControlPosition.x, top: masterControlPosition.y }}>
         {isMasterPanelOpen && <div className="relative mb-2 w-[calc(100vw-2rem)] max-w-[440px] overflow-hidden rounded-[32px] border border-yellow-400/40 bg-[#17130b]/95 p-4 shadow-[0_0_50px_rgba(234,179,8,.25)] backdrop-blur" style={{ width: `min(${masterControlSize.width}px, calc(100vw - 2rem))` }}>
-          <div className="absolute inset-5 rounded-full border border-yellow-300/10 pointer-events-none" />
           <div onPointerDown={handleMasterPointerDown} onPointerMove={handleMasterPointerMove} onPointerUp={handleMasterPointerUp} className="relative mb-4 flex touch-none cursor-grab items-center justify-between gap-2 active:cursor-grabbing">
             <div><p className="text-[10px] font-black tracking-[0.2em] text-yellow-300">{sessionControlLabel}</p><p className="max-w-72 truncate text-sm font-bold text-white">{nowPlaying?.title || "No song selected"}</p></div>
             <button onPointerDown={(event) => event.stopPropagation()} onClick={() => setIsMasterPanelOpen(false)} aria-label="Close Omni Control" title="Close Omni Control" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-black/30 text-gray-400 transition-colors hover:bg-white/10 hover:text-white">x</button>
           </div>
-          <div className="relative grid grid-cols-4 gap-1 rounded-full border border-yellow-400/20 bg-black/25 p-1">
-            {(["deck", "queue", "session", "access"] as const).filter((section) => section !== "access" || isMasterAccount).map((section) => <button key={section} type="button" onClick={() => setOmniSection(section)} className={`rounded-full py-2 text-[10px] font-black uppercase tracking-wide transition-colors ${omniSection === section ? "bg-yellow-400 text-black" : "text-yellow-100/70 hover:bg-white/10"}`}>{section}</button>)}
+          <div className="relative grid grid-cols-4 gap-1">
+            {(["deck", "queue", "session", "access"] as const).filter((section) => section !== "access" || isMasterAccount).map((section) => <button key={section} type="button" onClick={() => setOmniSection(section)} className={`border-b-2 py-2 text-[10px] font-black uppercase tracking-wide transition-colors ${omniSection === section ? "border-yellow-400 text-yellow-300" : "border-transparent text-yellow-100/70 hover:text-yellow-100"}`}>{section}</button>)}
           </div>
           {isSessionControlEnabled && omniSection === "deck" && <div className="relative mt-4 rounded-[24px] border border-yellow-400/20 bg-black/30 p-3">
               <div className="grid grid-cols-3 gap-2">
@@ -545,8 +608,12 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         {!isMasterPanelOpen && <button onPointerDown={handleMasterPointerDown} onPointerMove={handleMasterPointerMove} onPointerUp={handleMasterPointerUp} onClick={(event) => { if (masterDragCompletedRef.current) { event.preventDefault(); masterDragCompletedRef.current = false; return; } setIsMasterPanelOpen(true); }} aria-label={`${sessionControlLabel} options`} title={`${sessionControlLabel} options`} aria-expanded={false} className="flex h-10 w-10 touch-none cursor-grab items-center justify-center rounded-full border border-yellow-300/70 bg-yellow-500 px-0 text-xs font-black tracking-wide text-[#17130b] shadow-[0_0_20px_rgba(234,179,8,.3)] transition-all hover:-translate-y-0.5 hover:bg-yellow-400 active:translate-y-0 active:cursor-grabbing sm:h-11 sm:w-auto sm:rounded-lg sm:px-4"><span className="sm:hidden">{isMasterAccount ? "OC" : "HS"}</span><span className="hidden sm:inline">{sessionControlLabel}</span></button>}
       </div>}
       {nowPlaying?.videoId && (
-        <>
-          <div aria-hidden={isVideoHidden} className={`fixed bottom-4 right-4 z-50 h-[90px] w-[160px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-white/20 bg-black shadow-2xl transition-all sm:h-[180px] sm:w-[320px] ${isVideoHidden ? "pointer-events-none translate-x-[calc(100%+1rem)] opacity-0" : ""}`}>
+        <div className="fixed z-50" style={{ left: playerPosition.x, top: playerPosition.y }}>
+          {!isVideoHidden && <div className="relative pt-10 sm:pt-12">
+            <button onPointerDown={handlePlayerPointerDown} onPointerMove={handlePlayerPointerMove} onPointerUp={handlePlayerPointerUp} onClick={(event) => { if (playerDragCompletedRef.current) { event.preventDefault(); playerDragCompletedRef.current = false; return; } setIsVideoHidden(true); }} aria-label="Hide video player" title="Drag to move. Tap to hide video player" className="absolute right-0 top-0 flex h-9 w-9 touch-none cursor-grab items-center justify-center rounded-lg border border-white/20 bg-black/85 text-white shadow-xl backdrop-blur hover:border-yellow-500 hover:text-yellow-500 active:cursor-grabbing sm:h-11 sm:w-11">
+              <EyeOff size={19} />
+            </button>
+            <div aria-hidden={false} className="h-[90px] w-[160px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-white/20 bg-black shadow-2xl sm:h-[180px] sm:w-[320px]">
             <ReactPlayer
               ref={playerRef}
               src={`https://www.youtube.com/watch?v=${nowPlaying.videoId}`}
@@ -574,13 +641,11 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
               onLoadedMetadata={(event) => setTrackDuration(event.currentTarget.duration)}
             />
           </div>
-          {!isVideoHidden && <button onClick={() => setIsVideoHidden(true)} aria-label="Hide video player" title="Hide video player" className="fixed bottom-[calc(90px+1.25rem)] right-4 z-50 flex h-9 w-9 items-center justify-center rounded-lg border border-white/20 bg-black/85 text-white shadow-xl backdrop-blur hover:border-yellow-500 hover:text-yellow-500 sm:bottom-[calc(180px+1.25rem)] sm:h-11 sm:w-11">
-            <EyeOff size={19} />
-          </button>}
-          {isVideoHidden && <button onClick={() => setIsVideoHidden(false)} aria-label="Show video player" title="Show video player" className="fixed bottom-4 right-4 z-50 flex h-11 w-11 items-center justify-center rounded-lg border border-white/20 bg-black/85 text-white shadow-xl backdrop-blur hover:border-yellow-500 hover:text-yellow-500">
+          </div>}
+          {isVideoHidden && <button onPointerDown={handlePlayerPointerDown} onPointerMove={handlePlayerPointerMove} onPointerUp={handlePlayerPointerUp} onClick={(event) => { if (playerDragCompletedRef.current) { event.preventDefault(); playerDragCompletedRef.current = false; return; } setIsVideoHidden(false); }} aria-label="Show video player" title="Drag to move. Tap to show video player" className="flex h-9 w-9 touch-none cursor-grab items-center justify-center rounded-lg border border-white/20 bg-black/85 text-white shadow-xl backdrop-blur hover:border-yellow-500 hover:text-yellow-500 active:cursor-grabbing sm:h-11 sm:w-11">
             <Eye size={19} />
           </button>}
-        </>
+        </div>
       )}
     </PlaybackContext.Provider>
   );
