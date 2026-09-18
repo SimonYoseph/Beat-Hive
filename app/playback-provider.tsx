@@ -106,9 +106,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const playerDragCompletedRef = useRef(false);
   const accountEmail = session?.user?.email?.toLowerCase();
   const isMasterAccount = accountEmail === MASTER_CONTROL_EMAIL;
-  const isHiveHost = Boolean(accountEmail && room && (room.host_email?.toLowerCase() === accountEmail || room.hosts?.some((host) => host.email.toLowerCase() === accountEmail)));
+  const isHiveHost = room?.isHost === true;
   const canControlSession = isMasterAccount || isHiveHost;
-  const isSessionControlEnabled = isMasterAccount ? isMasterControlEnabled : isHiveHost;
+  const isSessionControlEnabled = canControlSession;
   const sessionControlLabel = isMasterAccount ? "OMNI CONTROL" : "HIVE SESSION";
   const getCollapsedControlWidth = () => window.innerWidth < 640 ? 40 : 170;
 
