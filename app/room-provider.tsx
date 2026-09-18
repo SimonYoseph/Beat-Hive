@@ -51,9 +51,12 @@ export function RoomProvider({ children }: { children: ReactNode }) {
   const [room, setRoom] = useState<SharedRoom | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const roomCodeRef = useRef("");
+  const roomRef = useRef<SharedRoom | null>(null);
+  const hostUpdateChainRef = useRef(Promise.resolve());
 
   const setSharedRoom = (nextRoom: SharedRoom) => {
     roomCodeRef.current = nextRoom.code;
+    roomRef.current = nextRoom;
     setRoom(nextRoom);
     applyRoom(nextRoom);
   };
@@ -97,14 +100,18 @@ export function RoomProvider({ children }: { children: ReactNode }) {
     setSharedRoom(data.room);
   };
 
-  const updateHostState = async (update: (state: RoomState) => RoomState) => {
-    const currentRoom = room;
-    if (!currentRoom) throw new Error("Start or join a shared room first.");
-    const state = update(currentRoom.state);
-    const response = await fetch(`/api/rooms/${encodeURIComponent(currentRoom.code)}/actions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "host-state", version: currentRoom.version, state }) });
-    if (!response.ok) throw new Error(await readError(response));
-    const data = await response.json() as { room: SharedRoom };
-    setSharedRoom(data.room);
+  const updateHostState = (update: (state: RoomState) => RoomState) => {
+    const request = hostUpdateChainRef.current.then(async () => {
+      const currentRoom = roomRef.current;
+      if (!currentRoom) throw new Error("Start or join a shared room first.");
+      const state = update(currentRoom.state);
+      const response = await fetch(`/api/rooms/${encodeURIComponent(currentRoom.code)}/actions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "host-state", version: currentRoom.version, state }) });
+      if (!response.ok) throw new Error(await readError(response));
+      const data = await response.json() as { room: SharedRoom };
+      setSharedRoom(data.room);
+    });
+    hostUpdateChainRef.current = request.catch(() => undefined);
+    return request;
   };
 
   useEffect(() => {
