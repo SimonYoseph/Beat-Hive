@@ -94,6 +94,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const transitionGainRef = useRef(1);
   const transitionFrameRef = useRef<number | null>(null);
   const isTransitioningRef = useRef(false);
+  const earlyTransitionForTrackRef = useRef<string | null>(null);
   const fallbackForTrackRef = useRef<string | null>(null);
   const masterDragRef = useRef<{ startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(null);
   const masterDragCompletedRef = useRef(false);
@@ -212,6 +213,31 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     updateRoom();
     await fadeTo(1, 650);
     isTransitioningRef.current = false;
+  }
+
+  function transitionToNextTrackBeforeEnd(currentTrack: NowPlayingTrack) {
+    if (!currentTrack.videoId || isTransitioningRef.current || earlyTransitionForTrackRef.current === currentTrack.videoId) return;
+    const queue = room?.state.queue || (() => {
+      try { return JSON.parse(window.localStorage.getItem("bh_play_queue") || "[]") as NowPlayingTrack[]; } catch { return []; }
+    })();
+    const currentIndex = queue.findIndex((track) => track.videoId === currentTrack.videoId);
+    const nextTrack = queue[currentIndex + 1];
+    if (!nextTrack) return;
+
+    earlyTransitionForTrackRef.current = currentTrack.videoId;
+    if (room && canControlSession) {
+      void transitionToTrack(nextTrack, () => persistHostState((state) => {
+        const currentQueue = state.queue || [];
+        const playedIndex = currentQueue.findIndex((track) => track.videoId === currentTrack.videoId);
+        return { ...state, queue: playedIndex >= 0 ? currentQueue.filter((_, index) => index !== playedIndex) : currentQueue, nowPlaying: { ...nextTrack, videoId: nextTrack.videoId! }, isPlaying: true };
+      }));
+      return;
+    }
+
+    void transitionToTrack(nextTrack, () => {
+      window.localStorage.setItem("bh_play_queue", JSON.stringify(queue.filter((_, index) => index !== currentIndex)));
+      window.dispatchEvent(new Event("bh-playback-change"));
+    });
   }
 
   function handleTrackEnded() {
@@ -467,6 +493,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     setElapsedTime(0);
     setTrackDuration(0);
+    earlyTransitionForTrackRef.current = null;
   }, [nowPlaying?.videoId]);
 
   useEffect(() => {
@@ -637,7 +664,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
                 const player = event.currentTarget;
                 if (Number.isFinite(player.duration)) setTrackDuration(player.duration);
                 setElapsedTime(player.currentTime);
-                if (player.duration - player.currentTime <= 12) ensureFallbackTrack(nowPlaying);
+                const remainingSeconds = player.duration - player.currentTime;
+                if (remainingSeconds <= 10) transitionToNextTrackBeforeEnd(nowPlaying);
+                if (remainingSeconds <= 12) ensureFallbackTrack(nowPlaying);
               }}
               onLoadedMetadata={(event) => setTrackDuration(event.currentTarget.duration)}
             />
