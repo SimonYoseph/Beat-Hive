@@ -49,11 +49,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (requests.length >= (typeof settings.maxRequests === "number" ? settings.maxRequests : 20)) return NextResponse.json({ error: "The room request limit has been reached." }, { status: 409 });
     const requestedTrack = { ...track, upvotes: 0 };
     const queue = state.queue || [];
-    const shouldStartPlayback = !state.nowPlaying && queue.length === 0;
+    const nextQueue = [...queue, requestedTrack];
+    const shouldStartPlayback = !state.nowPlaying;
     const nextState = {
       ...state,
       requests: [...requests, requestedTrack],
-      queue: shouldStartPlayback ? [requestedTrack] : queue,
+      queue: nextQueue,
       nowPlaying: shouldStartPlayback ? requestedTrack : state.nowPlaying,
       isPlaying: shouldStartPlayback || state.isPlaying,
     };

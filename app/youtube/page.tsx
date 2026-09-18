@@ -335,11 +335,9 @@ export default function YoutubePage() {
     window.localStorage.setItem("bh_youtube_requests", JSON.stringify(nextRequests));
     window.dispatchEvent(new Event("bh-playback-change"));
 
-    const activePlayIndex = playQueue.findIndex((track) => track.videoId === nowPlayingId);
-    const hasUpcomingTrack = activePlayIndex >= 0 ? activePlayIndex < playQueue.length - 1 : playQueue.length > 0;
     let nextPlayQueue = playQueue;
-    if (!hasUpcomingTrack) {
-      nextPlayQueue = [...playQueue, { ...queuedTrack, upvotes: 0 }];
+    if (!nextPlayQueue.some((queuedTrack) => queuedTrack.videoId === requestedTrack.videoId)) {
+      nextPlayQueue = [...nextPlayQueue, requestedTrack];
       setPlayQueue(nextPlayQueue);
       window.localStorage.setItem("bh_play_queue", JSON.stringify(nextPlayQueue));
     }
