@@ -65,6 +65,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const [isMuted, updateIsMuted] = useState(false);
   const [isVideoHidden, setIsVideoHidden] = useState(false);
   const [volume, setVolume] = useState(1);
+  const [transitionGain, setTransitionGain] = useState(1);
   const [isMasterControlEnabled, setIsMasterControlEnabled] = useState(true);
   const [roleEmail, setRoleEmail] = useState("");
   const [roleMessage, setRoleMessage] = useState("");
@@ -74,6 +75,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const [masterControlSize, setMasterControlSize] = useState({ width: 440, height: 0 });
   const [masterSettings, setMasterSettings] = useState<MasterSettings>(DEFAULT_MASTER_SETTINGS);
   const playerRef = useRef<HTMLVideoElement>(null);
+  const transitionGainRef = useRef(1);
+  const transitionFrameRef = useRef<number | null>(null);
+  const isTransitioningRef = useRef(false);
   const masterDragRef = useRef<{ startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(null);
   const masterDragCompletedRef = useRef(false);
   const masterResizeRef = useRef<{ startX: number; startY: number; width: number; height: number } | null>(null);
@@ -110,6 +114,38 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     if (track) window.localStorage.setItem("bh_now_playing", JSON.stringify(track));
     else window.localStorage.removeItem("bh_now_playing");
     persistHostState((state) => ({ ...state, nowPlaying: track?.videoId ? { ...track, videoId: track.videoId } : null }));
+  }
+
+  function fadeTo(gain: number, duration: number) {
+    if (transitionFrameRef.current !== null) cancelAnimationFrame(transitionFrameRef.current);
+    const initialGain = transitionGainRef.current;
+    const startedAt = performance.now();
+    return new Promise<void>((resolve) => {
+      const step = (now: number) => {
+        const progress = Math.min(1, (now - startedAt) / duration);
+        const nextGain = initialGain + (gain - initialGain) * progress;
+        transitionGainRef.current = nextGain;
+        setTransitionGain(nextGain);
+        if (progress < 1) transitionFrameRef.current = requestAnimationFrame(step);
+        else {
+          transitionFrameRef.current = null;
+          resolve();
+        }
+      };
+      transitionFrameRef.current = requestAnimationFrame(step);
+    });
+  }
+
+  async function transitionToTrack(track: NowPlayingTrack, updateRoom: () => void) {
+    if (isTransitioningRef.current || track.videoId === nowPlaying?.videoId) return;
+    isTransitioningRef.current = true;
+    await fadeTo(0, 280);
+    updateNowPlaying(track);
+    window.localStorage.setItem("bh_now_playing", JSON.stringify(track));
+    updateIsPlaying(true);
+    updateRoom();
+    await fadeTo(1, 650);
+    isTransitioningRef.current = false;
   }
 
   function handleTrackEnded() {
@@ -149,16 +185,14 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       const queue = room.state.queue || [];
       const currentIndex = queue.findIndex((track) => track.videoId === nowPlaying?.videoId);
       const previousTrack = currentIndex > 0 ? queue[currentIndex - 1] : null;
-      if (previousTrack) persistHostState((state) => ({ ...state, nowPlaying: previousTrack, isPlaying: true }));
+      if (previousTrack) void transitionToTrack(previousTrack, () => persistHostState((state) => ({ ...state, nowPlaying: previousTrack, isPlaying: true })));
       return;
     }
     try {
       const history = JSON.parse(window.localStorage.getItem("bh_play_history") || "[]") as NowPlayingTrack[];
       const previousTrack = history.filter((track) => track.videoId !== nowPlaying?.videoId).at(-1);
       if (!previousTrack) return;
-      setNowPlaying(previousTrack);
-      startPlayback();
-      window.dispatchEvent(new Event("bh-playback-change"));
+      void transitionToTrack(previousTrack, () => window.dispatchEvent(new Event("bh-playback-change")));
     } catch {
       // Keep the current track active if playback history cannot be read.
     }
@@ -169,7 +203,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       const queue = room.state.queue || [];
       const currentIndex = queue.findIndex((track) => track.videoId === nowPlaying?.videoId);
       const nextTrack = queue[currentIndex + 1];
-      if (nextTrack) persistHostState((state) => ({ ...state, nowPlaying: nextTrack, isPlaying: true }));
+      if (nextTrack) void transitionToTrack(nextTrack, () => persistHostState((state) => ({ ...state, nowPlaying: nextTrack, isPlaying: true })));
       return;
     }
     try {
@@ -177,9 +211,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       const currentIndex = queue.findIndex((track) => track.videoId === nowPlaying?.videoId);
       const nextTrack = queue[currentIndex + 1];
       if (!nextTrack) return;
-      setNowPlaying(nextTrack);
-      startPlayback();
-      window.dispatchEvent(new Event("bh-playback-change"));
+      void transitionToTrack(nextTrack, () => window.dispatchEvent(new Event("bh-playback-change")));
     } catch {
       // Keep the current track active if the queue cannot be read.
     }
@@ -290,6 +322,10 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("storage", handlePlaybackChange);
       window.removeEventListener("bh-playback-change", handlePlaybackChange);
     };
+  }, []);
+
+  useEffect(() => () => {
+    if (transitionFrameRef.current !== null) cancelAnimationFrame(transitionFrameRef.current);
   }, []);
 
   useEffect(() => {
@@ -430,7 +466,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
               src={`https://www.youtube.com/watch?v=${nowPlaying.videoId}`}
               playing={isPlaying}
               muted={isMuted}
-              volume={volume}
+              volume={volume * transitionGain}
               controls
               playsInline
               width="100%"
@@ -440,7 +476,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
                 recordPlayedTrack(nowPlaying);
               }}
               onPlaying={() => updateIsMuted(false)}
-              onPause={() => updateIsPlaying(false)}
+              onPause={() => { if (!isTransitioningRef.current) updateIsPlaying(false); }}
               onEnded={handleTrackEnded}
             />
           </div>

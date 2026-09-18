@@ -83,7 +83,7 @@ function QueueTrackItem({ track, index, isPlaying, canReorder, canRemove, canCon
       </div>
       <div className="col-span-2 flex w-full flex-col items-end gap-1">
         {isPlaying && <span className="inline-flex items-center gap-1 whitespace-nowrap text-[10px] font-bold text-red-400"><span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,.9)]" />Now Playing</span>}
-        <div className="flex w-full flex-wrap justify-end gap-1">
+        <div className="relative z-[60] flex w-full flex-wrap justify-end gap-1">
           {canControlPlayback && <button onClick={() => onPlayNow(track)} disabled={pendingAction} className="flex h-7 w-7 items-center justify-center rounded bg-emerald-500/20 text-emerald-300 hover:bg-emerald-400 hover:text-black disabled:cursor-wait disabled:opacity-50" aria-label={`Play ${track.title} now`} title="Play now"><Play size={14} fill="currentColor" /></button>}
           {canControlPlayback && <button onClick={() => onMoveToTop(track.videoId)} disabled={pendingAction} className="flex h-7 w-7 items-center justify-center rounded bg-white/5 text-gray-300 hover:bg-emerald-400 hover:text-black disabled:cursor-wait disabled:opacity-50" aria-label={`Move ${track.title} to top of queue`} title="Move to top"><ArrowUp size={14} /></button>}
           <button onClick={() => onUpvote(track.videoId)} disabled={pendingAction} className={`flex h-7 items-center justify-center rounded bg-white/5 text-xs text-gray-300 hover:bg-yellow-500 hover:text-black disabled:cursor-wait disabled:opacity-50 ${showUpvoteCount ? "gap-0.5 px-1.5" : "w-7"}`} aria-label={`Upvote ${track.title}`} title="Upvote">
@@ -156,6 +156,7 @@ export default function YoutubePage() {
   const [masterSettings, setMasterSettings] = useState<MasterSettings>(DEFAULT_MASTER_SETTINGS);
   const isMasterAccount = session?.user?.email?.toLowerCase() === MASTER_CONTROL_EMAIL && isMasterControlEnabled;
   const canManageQueue = isMasterAccount || isHost;
+  const canPromoteRequests = isMasterAccount && (!room || isHost);
   const searchFormRef = useRef<HTMLFormElement>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -415,6 +416,24 @@ export default function YoutubePage() {
       const overId = String(over.id);
       const requestIndex = requestTracks.findIndex((track) => `request-${track.videoId}` === activeId);
       if (requestIndex >= 0) {
+        if (overId === "hive-queue" || playQueue.some((track) => track.videoId === overId)) {
+          if (!canPromoteRequests) {
+            setMessage("Only the Omni host can add requests to the Hive Queue.");
+            return;
+          }
+          void runTrackAction(activeId, () => updateHostState((state) => {
+            const requests = state.requests || [];
+            const request = requests.find((track) => track.videoId === activeId.replace(/^request-/, ""));
+            if (!request) return state;
+            const queue = state.queue || [];
+            if (queue.some((track) => track.videoId === request.videoId)) return { ...state, requests: requests.filter((track) => track.videoId !== request.videoId) };
+            const targetIndex = overId === "hive-queue" ? queue.length : queue.findIndex((track) => track.videoId === overId);
+            const nextQueue = [...queue];
+            nextQueue.splice(targetIndex < 0 ? queue.length : targetIndex, 0, request);
+            return { ...state, requests: requests.filter((track) => track.videoId !== request.videoId), queue: nextQueue };
+          })).catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Could not add the request to the Hive Queue."));
+          return;
+        }
         const targetIndex = requestTracks.findIndex((track) => `request-${track.videoId}` === overId);
         if (targetIndex >= 0) void updateHostState((state) => ({ ...state, requests: arrayMove(state.requests || [], requestIndex, targetIndex) })).catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Could not reorder requests."));
         return;
