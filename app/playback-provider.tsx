@@ -379,13 +379,14 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     masterResizeRef.current = null;
   }
 
-  function getPlayerDimensions() {
+  function getPlayerDimensions(hidden = isVideoHidden) {
     const compactPlayer = window.innerWidth < 640;
+    if (hidden) return { width: compactPlayer ? 36 : 44, height: compactPlayer ? 36 : 44, controlHeight: 0 };
     return { width: compactPlayer ? Math.min(160, window.innerWidth - 32) : 320, height: compactPlayer ? 90 : 180, controlHeight: compactPlayer ? 40 : 48 };
   }
 
-  function constrainPlayerPosition(position: { x: number; y: number }) {
-    const { width, height, controlHeight } = getPlayerDimensions();
+  function constrainPlayerPosition(position: { x: number; y: number }, dimensions = getPlayerDimensions()) {
+    const { width, height, controlHeight } = dimensions;
     return {
       x: Math.max(16, Math.min(position.x, window.innerWidth - width - 16)),
       y: Math.max(PLAYER_MIN_TOP, Math.min(position.y, Math.max(PLAYER_MIN_TOP, window.innerHeight - height - controlHeight - 16))),
@@ -642,7 +643,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
             />
           </div>
           </div>}
-          {isVideoHidden && <button onPointerDown={handlePlayerPointerDown} onPointerMove={handlePlayerPointerMove} onPointerUp={handlePlayerPointerUp} onClick={(event) => { if (playerDragCompletedRef.current) { event.preventDefault(); playerDragCompletedRef.current = false; return; } setIsVideoHidden(false); }} aria-label="Show video player" title="Drag to move. Tap to show video player" className="flex h-9 w-9 touch-none cursor-grab items-center justify-center rounded-lg border border-white/20 bg-black/85 text-white shadow-xl backdrop-blur hover:border-yellow-500 hover:text-yellow-500 active:cursor-grabbing sm:h-11 sm:w-11">
+          {isVideoHidden && <button onPointerDown={handlePlayerPointerDown} onPointerMove={handlePlayerPointerMove} onPointerUp={handlePlayerPointerUp} onClick={(event) => { if (playerDragCompletedRef.current) { event.preventDefault(); playerDragCompletedRef.current = false; return; } const nextPosition = constrainPlayerPosition(playerPositionRef.current, getPlayerDimensions(false)); playerPositionRef.current = nextPosition; setPlayerPosition(nextPosition); window.localStorage.setItem("bh_videoPlayerPosition", JSON.stringify(nextPosition)); setIsVideoHidden(false); }} aria-label="Show video player" title="Drag to move. Tap to show video player" className="flex h-9 w-9 touch-none cursor-grab items-center justify-center rounded-lg border border-white/20 bg-black/85 text-white shadow-xl backdrop-blur hover:border-yellow-500 hover:text-yellow-500 active:cursor-grabbing sm:h-11 sm:w-11">
             <Eye size={19} />
           </button>}
         </div>
