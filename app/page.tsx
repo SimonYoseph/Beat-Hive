@@ -1345,7 +1345,7 @@ export default function BeatHiveApp() {
             <div className="mx-auto flex w-fit items-center rounded-xl border border-white/10 bg-[#1a1a1a] p-1">
               <span className="px-2.5 text-[10px] font-bold uppercase tracking-widest text-yellow-500">Use Beat Hive As</span>
               <button onClick={() => { setUserRole('guest'); setHasAccess(false); }} className={`flex h-9 items-center justify-center gap-1.5 rounded-lg px-2.5 text-xs font-bold transition-colors ${userRole === 'guest' ? 'bg-white/10 text-white shadow-sm' : 'text-gray-500 hover:text-white'}`} aria-pressed={userRole === 'guest'}>
-                <User size={14} /> Guest
+                <User size={14} /> Hive Guest
               </button>
               <button onClick={() => { setHostSetupRequested(true); setUserRole('dj'); setDjRoomActive(false); setIsPartyCreator(false); }} className={`flex h-9 items-center justify-center gap-1.5 rounded-lg px-2.5 text-xs font-bold transition-colors ${userRole === 'dj' ? 'bg-yellow-500 text-black shadow-sm' : 'text-gray-500 hover:text-yellow-500'}`} aria-pressed={userRole === 'dj'}>
                 <Headphones size={14} /> Hive Host
