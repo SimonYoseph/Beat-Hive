@@ -2,6 +2,7 @@ import NextAuth from "next-auth";
 import type { NextAuthOptions } from "next-auth";
 import SpotifyProvider from "next-auth/providers/spotify";
 import GoogleProvider from "next-auth/providers/google";
+import CredentialsProvider from "next-auth/providers/credentials";
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -20,6 +21,20 @@ export const authOptions: NextAuthOptions = {
         },
       },
     }),
+    ...(process.env.NODE_ENV === "development" ? [
+      CredentialsProvider({
+        id: "development-test",
+        name: "Development test account",
+        credentials: {},
+        async authorize() {
+          return {
+            id: "beat-hive-development-tester",
+            name: "Beat Hive Tester",
+            email: "beat-hive-tester@localhost",
+          };
+        },
+      }),
+    ] : []),
   ],
   callbacks: {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

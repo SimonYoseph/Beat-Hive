@@ -267,6 +267,7 @@ function PartyHistorySection({ history, isLoading }: { history: PartyHistory | n
 // Main Entry Component
 export default function BeatHiveApp() {
   const { data: session, status: sessionStatus } = useSession();
+  const isDevelopment = process.env.NODE_ENV === 'development';
   const authProvider = (session as (typeof session & { provider?: string }) | null)?.provider;
   const { nowPlaying, isPlaying, setNowPlaying, setIsPlaying } = usePlayback();
   const { room: sharedRoom, createRoom } = useRoom();
@@ -297,6 +298,7 @@ export default function BeatHiveApp() {
   // App navigation state
   const [viewMode, setViewMode] = usePersistedState<'globe' | 'list'>('bh_viewMode', 'globe');
   const [showSettings, setShowSettings] = usePersistedState('bh_showSettings', false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [partyHistory, setPartyHistory] = useState<PartyHistory | null>(null);
   const [isPartyHistoryLoading, setIsPartyHistoryLoading] = useState(false);
   const [showMusicSources, setShowMusicSources] = useState(false);
@@ -786,6 +788,21 @@ export default function BeatHiveApp() {
     }
   };
 
+  const handleDeleteAccount = async () => {
+    if (!window.confirm('Delete your Beat Hive account and all associated party data? This cannot be undone.')) return;
+    setIsDeletingAccount(true);
+    try {
+      const response = await fetch('/api/account', { method: 'DELETE' });
+      const data = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(data.error || 'Could not delete your Beat Hive account.');
+      Object.keys(window.localStorage).filter((key) => key.startsWith('bh_')).forEach((key) => window.localStorage.removeItem(key));
+      await signOut({ callbackUrl: '/' });
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Could not delete your Beat Hive account.');
+      setIsDeletingAccount(false);
+    }
+  };
+
   // State 1: User needs to Sign In / Create Account
   const isUserLoggedIn = Boolean(session);
   const hostProfileSettings = showSettings && (
@@ -817,6 +834,7 @@ export default function BeatHiveApp() {
             <button type="button" onClick={() => customIconInputRef.current?.click()} className="flex-1 rounded-lg bg-yellow-500 py-3 text-sm font-bold text-black transition-colors hover:bg-yellow-400">Upload image</button>
             {customIcon && <button type="button" onClick={() => setCustomIcon(null)} className="flex-1 rounded-lg border border-white/15 py-3 text-sm font-bold text-white transition-colors hover:bg-white/10">Use account photo</button>}
           </div>
+          <button type="button" onClick={() => void handleDeleteAccount()} disabled={isDeletingAccount} className="mt-4 flex w-full items-center justify-center rounded-lg border border-red-500/50 bg-red-500/10 px-4 py-3 text-sm font-bold text-red-300 transition-colors hover:bg-red-500 hover:text-white disabled:cursor-wait disabled:opacity-60">{isDeletingAccount ? 'Deleting account...' : 'Delete Beat Hive account'}</button>
         </motion.section>
       </motion.div>
     </AnimatePresence>
@@ -857,6 +875,7 @@ export default function BeatHiveApp() {
               </svg>
               Continue with Google
             </button>
+            {isDevelopment && <button onClick={() => signIn('development-test', { callbackUrl: '/' })} className="w-full rounded-xl border border-yellow-500/30 bg-yellow-500/10 px-6 py-3 text-sm font-bold text-yellow-500 transition-colors hover:bg-yellow-500 hover:text-black">Use test account</button>}
 
           </div>
           
@@ -1321,9 +1340,22 @@ export default function BeatHiveApp() {
           </div>
         </div>}
 
-        {/* View Toggle */}
-        <div data-tutorial-target="guest-view-toggle" className="mx-auto mb-8 mt-4 flex shrink-0 items-center gap-2">
-          <div className="flex bg-[#1a1a1a] rounded-xl p-1 border border-white/5 w-48 relative overflow-hidden">
+        <div className="mx-auto mt-4 w-full max-w-[338px]">
+          {canSwitchRole && <div>
+            <div className="mx-auto flex w-fit items-center rounded-xl border border-white/10 bg-[#1a1a1a] p-1">
+              <span className="px-2.5 text-[10px] font-bold uppercase tracking-widest text-yellow-500">Use Beat Hive As</span>
+              <button onClick={() => { setUserRole('guest'); setHasAccess(false); }} className={`flex h-9 items-center justify-center gap-1.5 rounded-lg px-2.5 text-xs font-bold transition-colors ${userRole === 'guest' ? 'bg-white/10 text-white shadow-sm' : 'text-gray-500 hover:text-white'}`} aria-pressed={userRole === 'guest'}>
+                <User size={14} /> Guest
+              </button>
+              <button onClick={() => { setHostSetupRequested(true); setUserRole('dj'); setDjRoomActive(false); setIsPartyCreator(false); }} className={`flex h-9 items-center justify-center gap-1.5 rounded-lg px-2.5 text-xs font-bold transition-colors ${userRole === 'dj' ? 'bg-yellow-500 text-black shadow-sm' : 'text-gray-500 hover:text-yellow-500'}`} aria-pressed={userRole === 'dj'}>
+                <Headphones size={14} /> Hive Host
+              </button>
+            </div>
+          </div>}
+
+          {/* View Toggle */}
+          <div data-tutorial-target="guest-view-toggle" className={`flex shrink-0 items-center gap-2 ${canSwitchRole ? 'mt-3' : ''}`}>
+          <div className="relative flex min-w-0 flex-1 overflow-hidden rounded-xl border border-white/5 bg-[#1a1a1a] p-1">
             <motion.div
               layout
               className="absolute top-1 bottom-1 w-[calc(50%-4px)] bg-[#2a2a2a] rounded-lg shadow-md border border-white/5 z-0"
@@ -1351,6 +1383,7 @@ export default function BeatHiveApp() {
             <span>Request Music</span>
             <ListMusic size={20} />
           </NextLink>
+        </div>
         </div>
 
         {userRole === 'dj' && djPreviewingGuest && (
@@ -1447,6 +1480,7 @@ export default function BeatHiveApp() {
                       <LogOut size={17} /> Sign out
                     </button>
                   )}
+                  <button type="button" onClick={() => void handleDeleteAccount()} disabled={isDeletingAccount} className="mt-3 flex w-full items-center justify-center rounded-lg border border-red-500/50 bg-red-500/10 px-4 py-3 text-sm font-bold text-red-300 transition-colors hover:bg-red-500 hover:text-white disabled:cursor-wait disabled:opacity-60">{isDeletingAccount ? 'Deleting account...' : 'Delete Beat Hive account'}</button>
                   <button type="button" onClick={() => replayTutorial(userRole === 'dj' ? 'host' : 'guest', userRole === 'dj' && djRoomActive ? 'session' : 'setup')} className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-white/15 bg-[#111] px-4 py-3 text-sm font-bold text-gray-200 transition-colors hover:border-yellow-500/50 hover:text-yellow-500">
                     <Play size={16} fill="currentColor" /> Replay {userRole === 'dj' ? 'Hive Host' : 'Hive User'} Tutorial
                   </button>
@@ -1454,17 +1488,6 @@ export default function BeatHiveApp() {
                     <LogOut size={16} /> Leave session
                   </button>}
                 </div>
-                {canSwitchRole && <div>
-                  <h3 className="mb-3 text-sm font-bold uppercase tracking-widest text-gray-400">Use Beat Hive As</h3>
-                  <div className="grid grid-cols-2 rounded-xl border border-white/10 bg-[#111] p-1">
-                    <button onClick={() => { setUserRole('guest'); setHasAccess(false); setShowSettings(false); }} className={`flex items-center justify-center gap-2 rounded-lg py-3 text-sm font-bold transition-colors ${userRole === 'guest' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-white'}`} aria-pressed={userRole === 'guest'}>
-                      <User size={17} /> Guest
-                    </button>
-                    <button onClick={() => { setHostSetupRequested(true); setUserRole('dj'); setDjRoomActive(false); setIsPartyCreator(false); setShowSettings(false); }} className={`flex items-center justify-center gap-2 rounded-lg py-3 text-sm font-bold transition-colors ${userRole === 'dj' ? 'bg-yellow-500 text-black' : 'text-gray-500 hover:text-yellow-500'}`} aria-pressed={userRole === 'dj'}>
-                      <Headphones size={17} /> Hive Host
-                    </button>
-                  </div>
-                </div>}
                 <div>
                   <button onClick={() => setShowMusicSources(!showMusicSources)} className="w-full flex items-center justify-between rounded-xl bg-[#111] p-4 text-left border border-white/10 text-white hover:border-yellow-500/50 transition-colors">
                     <div>
