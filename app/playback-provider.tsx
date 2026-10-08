@@ -76,6 +76,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const [isMuted, updateIsMuted] = useState(false);
   const [isVideoHidden, setIsVideoHidden] = useState(false);
   const [volume, setVolume] = useState(1);
+  const [playerOrigin, setPlayerOrigin] = useState("");
   const [elapsedTime, setElapsedTime] = useState(0);
   const [trackDuration, setTrackDuration] = useState(0);
   const [transitionGain, setTransitionGain] = useState(1);
@@ -454,6 +455,10 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    setPlayerOrigin(window.location.origin);
+  }, []);
+
+  useEffect(() => {
     if (!hasRestoredPlayback) return;
     window.localStorage.setItem("bh_isPlaying", JSON.stringify(isPlaying));
   }, [hasRestoredPlayback, isPlaying]);
@@ -645,6 +650,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
             <ReactPlayer
               ref={playerRef}
               src={`https://www.youtube.com/watch?v=${nowPlaying.videoId}`}
+              config={{ youtube: { origin: playerOrigin } }}
               playing={isPlaying}
               loop={isFindingFallbackTrack}
               muted={isMuted}
@@ -653,12 +659,16 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
               playsInline
               width="100%"
               height="100%"
-              onPlay={() => {
+              onPlaying={() => {
                 updateIsPlaying(true);
                 recordPlayedTrack(nowPlaying);
+                updateIsMuted(false);
               }}
-              onPlaying={() => updateIsMuted(false)}
               onPause={() => { if (!isTransitioningRef.current) updateIsPlaying(false); }}
+              onError={() => {
+                updateIsPlaying(false);
+                persistHostState((state) => ({ ...state, isPlaying: false }));
+              }}
               onEnded={handleTrackEnded}
               onTimeUpdate={(event) => {
                 const player = event.currentTarget;
